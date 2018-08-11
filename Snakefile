@@ -19,10 +19,15 @@ rule prepare_all_elec_networks:
         expand("networks/elec_s{simpl}_{clusters}_l{ll}_{opts}.nc",
                **config['scenario'])
 
-rule solve_all_elec_networks:
+rule benchmark_juliapython:
     input:
-        expand("results/networks/elec_s{simpl}_{clusters}_l{ll}_{opts}.nc",
-               **config['scenario'])
+        expand("benchmarks/min_solve_network/{juliapython}_time_{network}_s{simpl}_{clusters}_lv{lv}_{opts}.csv",
+               juliapython=["julia", "python"],
+               network="elec",
+               simpl="",
+               clusters=[45, 64, 90, 128, 181],
+               lv=1.25, # ignored
+               opts="3H")
 
 if config['enable']['prepare_links_p_nom']:
     rule prepare_links_p_nom:
@@ -187,16 +192,6 @@ rule cluster_network:
     # group: 'build_pypsa_networks'
     script: "scripts/cluster_network.py"
 
-# rule add_sectors:
-#     input:
-#         network="networks/elec_{cost}_{resarea}_{opts}.nc",
-#         emobility="data/emobility"
-#     output: "networks/sector_{cost}_{resarea}_{sectors}_{opts}.nc"
-#     benchmark: "benchmarks/add_sectors/sector_{resarea}_{sectors}_{opts}"
-#     threads: 1
-#     resources: mem=1000
-#     script: "scripts/add_sectors.py"
-
 rule prepare_network:
     input: 'networks/{network}_s{simpl}_{clusters}.nc', tech_costs=COSTS
     output: 'networks/{network}_s{simpl}_{clusters}_l{ll}_{opts}.nc'
@@ -290,6 +285,26 @@ rule plot_summary:
     input: "results/summaries/{network}_s{simpl}_{clusters}_l{ll}_{opts}_{country}"
     output: "results/plots/summary_{summary}_{network}_s{simpl}_{clusters}_l{ll}_{opts}_{country}.{ext}"
     script: "scripts/plot_summary.py"
+
+rule min_solve_network_pypsa:
+    input: "networks/{network}_s{simpl}_{clusters}_lv{lv}_{opts}.nc"
+    output: "benchmarks/min_solve_network/python_time_{network}_s{simpl}_{clusters}_lv{lv}_{opts}.csv"
+    log: "benchmarks/min_solve_network/python_mprof_{network}_s{simpl}_{clusters}_lv{lv}_{opts}"
+    benchmark: "benchmarks/min_solve_network/python_benc_{network}_s{simpl}_{clusters}_lv{lv}_{opts}"
+    shadow: "shallow"
+    threads: 2
+    resources: mem_mb=memory
+    shell: "mprof run -C -T 5 --nopython python3 scripts/min_solve_network.py {input:q} {output:q} {log:q}"
+
+rule min_solve_network_julia:
+    input: "networks/{network}_s{simpl}_{clusters}_lv{lv}_{opts}.nc"
+    output: "benchmarks/min_solve_network/julia_time_{network}_s{simpl}_{clusters}_lv{lv}_{opts}.csv"
+    log: "benchmarks/min_solve_network/julia_mprof_{network}_s{simpl}_{clusters}_lv{lv}_{opts}"
+    benchmark: "benchmarks/min_solve_network/julia_benc_{network}_s{simpl}_{clusters}_lv{lv}_{opts}"
+    shadow: "shallow"
+    threads: 2
+    resources: mem_mb=memory
+    shell: "mprof run -C -T 5 --nopython julia scripts/min_solve_network.jl {input:q} {output:q} {log:q}"
 
 def input_plot_p_nom_max(wildcards):
     return [('networks/{network}_s{simpl}{maybe_cluster}.nc'
