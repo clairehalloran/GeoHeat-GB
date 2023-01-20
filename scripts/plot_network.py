@@ -44,7 +44,8 @@ def make_handler_map_to_scale_circles_as_in(ax, dont_resize_actively=False):
     fig = ax.get_figure()
 
     def axes2pt():
-        return np.diff(ax.transData.transform([(0, 0), (1, 1)]), axis=0)[0] * (
+        # return np.diff(ax.transData.transform([(0, 0), (1, 1)]))[0] * (
+        return np.diff(ax.transData.transform([(0, 0), (1, 1)])) * (
             72.0 / fig.dpi
         )
 
@@ -63,20 +64,29 @@ def make_handler_map_to_scale_circles_as_in(ax, dont_resize_actively=False):
     def legend_circle_handler(
         legend, orig_handle, xdescent, ydescent, width, height, fontsize
     ):
-        w, h = 2.0 * orig_handle.get_radius() * axes2pt()
+        # w,h = 2.0 * orig_handle.get_radius() * axes2pt()
+        w,h = orig_handle.get_radius() * axes2pt()
         e = Ellipse(
             xy=(0.5 * width - 0.5 * xdescent, 0.5 * height - 0.5 * ydescent),
             width=w,
             height=w,
-        )
+            )
+        #!!!
+        # center = 0.5 * width - 0.5 * xdescent, 0.5 * height - 0.5 * ydescent
+        # w = 2.0 * orig_handle.get_radius() * axes2pt()
+        # e = Ellipse(
+        #     xy=center,
+        #     width=w,
+        #     height=w,
+        # )
         ellipses.append((e, orig_handle.get_radius()))
         return e
 
     return {Circle: HandlerPatch(patch_func=legend_circle_handler)}
 
-
 def make_legend_circles_for(sizes, scale=1.0, **kw):
-    return [Circle((0, 0), radius=(s / scale) ** 0.5, **kw) for s in sizes]
+    #!!! changing power
+    return [Circle((0, 0), radius=(s / scale)**0.5, **kw) for s in sizes]
 
 
 def set_plot_style():
@@ -174,7 +184,7 @@ def plot_map(n, opts, ax=None, attribute="p_nom"):
     handles = []
     labels = []
 
-    for s in (10, 1):
+    for s in (10, 5):
         handles.append(
             plt.Line2D(
                 [0], [0], color=line_colors["exp"], linewidth=s * 1e3 / linewidth_factor
@@ -185,11 +195,12 @@ def plot_map(n, opts, ax=None, attribute="p_nom"):
         handles,
         labels,
         loc="upper left",
-        bbox_to_anchor=(0.24, 1.01),
+        bbox_to_anchor=(1.01, 0.66),
         frameon=False,
         labelspacing=0.8,
-        handletextpad=1.5,
-        title="Transmission Exp./Exist.             ",
+        # handletextpad=1.5,
+        handletextpad=4.5,
+        title="Transmission Exp./Exist.",
     )
     ax.add_artist(l1_1)
 
@@ -201,12 +212,12 @@ def plot_map(n, opts, ax=None, attribute="p_nom"):
                 [0], [0], color=line_colors["cur"], linewidth=s * 1e3 / linewidth_factor
             )
         )
-        labels.append("/")
+        labels.append(" ")
     l1_2 = ax.legend(
         handles,
         labels,
         loc="upper left",
-        bbox_to_anchor=(0.26, 1.01),
+        bbox_to_anchor=(1.18, 0.66),
         frameon=False,
         labelspacing=0.8,
         handletextpad=0.5,
@@ -215,16 +226,23 @@ def plot_map(n, opts, ax=None, attribute="p_nom"):
     ax.add_artist(l1_2)
 
     handles = make_legend_circles_for(
-        [10e3, 5e3, 1e3], scale=bus_size_factor, facecolor="w"
+        #!!!
+        [10, 5, 3],
+        # [10e3, 5e3, 1e3],
+        scale=bus_size_factor, 
+        # facecolor="w",
+        #!!!
+        facecolor = 'None',
+        edgecolor='b'
     )
     labels = ["{} GW".format(s) for s in (10, 5, 3)]
     l2 = ax.legend(
         handles,
         labels,
         loc="upper left",
-        bbox_to_anchor=(0.01, 1.01),
+        bbox_to_anchor=(1.01, 0.5),
         frameon=False,
-        labelspacing=1.0,
+        labelspacing=1.7,
         title="Generation",
         handler_map=make_handler_map_to_scale_circles_as_in(ax),
     )
@@ -383,11 +401,12 @@ if __name__ == "__main__":
     scenario_opts = wildcards.opts.split("-")
 
     fig, ax = plt.subplots(
-        figsize=map_figsize, subplot_kw={"projection": ccrs.PlateCarree()}
+        #!!! change projection here
+        figsize=map_figsize, subplot_kw={"projection": ccrs.EuroPP()}
     )
     plot_map(n, config["plotting"], ax=ax, attribute=wildcards.attr)
 
-    fig.savefig(snakemake.output.only_map, dpi=150, bbox_inches="tight")
+    fig.savefig(snakemake.output.only_map, dpi=300, bbox_inches="tight")
 
     ax1 = fig.add_axes([-0.115, 0.625, 0.2, 0.2])
     plot_total_energy_pie(n, config["plotting"], ax=ax1)

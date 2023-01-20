@@ -241,6 +241,8 @@ def distribute_clusters(n, n_clusters, focus_weights=None, solver_name="cbc"):
     if focus_weights is not None:
 
         total_focus = sum(list(focus_weights.values()))
+        #!!!
+        # total_focus = sum(list(float(focus_weights)))
 
         assert (
             total_focus <= 1.0

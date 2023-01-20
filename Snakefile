@@ -27,8 +27,8 @@ ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 wildcard_constraints:
     simpl="[a-zA-Z0-9]*|all",
     clusters="[0-9]+m?|all",
-    ll="(v|c)([0-9\.]+|opt|all)|all",
-    opts="[-+a-zA-Z0-9\.]*",
+    ll="(v|c)([0-9/.]+|opt|all)|all",
+    opts="[-+a-zA-Z0-9/.]*",
 
 
 rule cluster_all_networks:
@@ -524,12 +524,12 @@ rule prepare_network:
 def memory(w):
     factor = 3.0
     for o in w.opts.split("-"):
-        m = re.match(r"^(\d+)h$", o, re.IGNORECASE)
+        m = re.match(r"^(/d+)h$", o, re.IGNORECASE)
         if m is not None:
             factor /= int(m.group(1))
             break
     for o in w.opts.split("-"):
-        m = re.match(r"^(\d+)seg$", o, re.IGNORECASE)
+        m = re.match(r"^(/d+)seg$", o, re.IGNORECASE)
         if m is not None:
             factor *= int(m.group(1)) / 8760
             break
