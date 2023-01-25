@@ -14,6 +14,10 @@ import cartopy.crs as ccrs
 n = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s.nc")
 base = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\base.nc")
 elec = base = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec.nc")
+n_48 = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_48.nc")
+n_48_ec = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_48_ec.nc")
+n_48_ec_opt = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_48_ec_lcopt_Co2L.nc")
+n_solved =pypsa.Network(r'C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\results\networks\elec_s_48_ec_lcopt_Co2L.nc')
 
 # plot map of network
 n.plot()
@@ -21,6 +25,8 @@ n.plot()
 generators = n.generators
 # list of storage units
 n.storage_units.head()
+
+links = n_solved.links
 
 #%% time-varying input data
 # load time series data at each bus
