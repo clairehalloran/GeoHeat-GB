@@ -47,6 +47,7 @@ dependencies:
 - cartopy
 - descartes
 - rasterio!=1.2.10
+- rioxarray
 
   # PyPSA-Eur-Sec Dependencies
 - geopy

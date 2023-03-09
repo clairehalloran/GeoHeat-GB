@@ -406,6 +406,10 @@ rule add_electricity:
             for attr, fn in d.items()
             if str(fn).startswith("data/")
         },
+        **{
+            f"load_{source}_source_heating": "resources/" + RDIR + f"load_{source}_source_heating.nc"
+            for source in config["heating"]
+        },
         base_network="networks/" + RDIR + "base.nc",
         tech_costs=COSTS,
         regions="resources/" + RDIR + "regions_onshore.geojson",

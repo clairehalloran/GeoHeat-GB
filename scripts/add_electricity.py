@@ -262,6 +262,22 @@ def attach_load(n, regions, load, nuts3_shapes, countries, scaling=1.0):
 
     n.madd("Load", substation_lv_i, bus=substation_lv_i, p_set=load)
 
+#!!!
+def attach_heat_demand(n, input_profiles, sources):
+    substation_lv_i = n.buses.index[n.buses["substation_lv"]]
+    
+    for source in sources:
+        with xr.open_dataset(getattr(input_profiles, 'load_'+source+'_source_heating')) as ds:
+            if ds.indexes["bus"].empty:
+                continue
+
+            
+            heating_demand = ds['demand']/ds['cop']
+            heating_demand = heating_demand.to_pandas().T
+            n.madd('Load',
+                   substation_lv_i+f'_{source}_heat',
+                   bus = substation_lv_i,
+                   p_set = heating_demand)
 
 def update_transmission_costs(n, costs, length_factor=1.0):
     # TODO: line length factor of lines is applied to lines and links.
@@ -350,6 +366,8 @@ def attach_wind_and_solar(
                 p_max_pu=ds["profile"].transpose("time", "bus").to_pandas(),
             )
 
+
+#!!! add attach_heating_demand function that matches heating demand to network and adds it to load
 
 def attach_conventional_generators(
     n,
@@ -748,7 +766,15 @@ if __name__ == "__main__":
         snakemake.config["countries"],
         snakemake.config["load"]["scaling_factor"],
     )
-
+    
+    heat_sources = snakemake.config['electricity']['heat_sources']
+    #!!! add some sort of logger info about heat demand
+    attach_heat_demand(
+        n,
+        snakemake.input, # what should this be???
+        heat_sources
+        )
+    
     update_transmission_costs(n, costs, snakemake.config["lines"]["length_factor"])
 
     conventional_inputs = {
