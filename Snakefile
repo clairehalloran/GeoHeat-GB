@@ -482,9 +482,28 @@ rule cluster_network:
     script:
         "scripts/cluster_network.py"
 
+rule build_cop_profiles:
+    input:
+        temp_ground="resources/" + RDIR + "temp_ground_elec_s{simpl}_{clusters}.nc",
+        temp_air="resources/" + RDIR + "temp_air_elec_s{simpl}_{clusters}.nc",
+    output:
+        cop_ground ="resources/" + RDIR +  "cop_ground_elec_s{simpl}_{clusters}.nc",
+        cop_air ="resources/" + RDIR +  "cop_air_elec_s{simpl}_{clusters}.nc",
+    resources:
+        mem_mb=20000,
+    log:
+        "logs/" + RDIR + "build_cop_profiles_s{simpl}_{clusters}.log",
+    benchmark:
+        "benchmarks/" + RDIR + "build_cop_profiles/s{simpl}_{clusters}"
+    script:
+        "scripts/build_cop_profiles.py"
 
 rule add_extra_components:
     input:
+        profile_air_source_heating = "resources/" + RDIR + "load_air_source_heating.nc",
+        profile_ground_source_heating = "resources/" + RDIR + "load_ground_source_heating.nc",
+        profile_air_cop = "resources/" + RDIR + "cop_air_elec_s{simpl}_{clusters}.nc",
+        profile_ground_cop = "resources/" + RDIR + "cop_ground_elec_s{simpl}_{clusters}.nc",
         network="networks/" + RDIR + "elec_s{simpl}_{clusters}.nc",
         tech_costs=COSTS,
     output:

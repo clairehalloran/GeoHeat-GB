@@ -7,18 +7,39 @@ Created on Sun Dec  4 23:35:20 2022
 
 import pypsa
 import matplotlib.pyplot as plt
-plt.style.use('bmh')
+# plt.style.use('bmh')
 import cartopy.crs as ccrs
 
 # n = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\results\networks\elec_s_47_ec_lcopt_Co2L.nc")
 n = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s.nc")
 base = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\base.nc")
 elec = base = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec.nc")
-n_48 = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_48.nc")
-n_48_ec = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_48_ec.nc")
+n_39 = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_39.nc")
+n_39_ec = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_39_ec.nc")
 n_48_ec_opt = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_48_ec_lcopt_Co2L.nc")
 n_solved =pypsa.Network(r'C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\results\networks\elec_s_48_ec_lcopt_Co2L.nc')
 
+#%% checking heating
+cops = n_39_ec.links_t.efficiency
+
+loads = n_39_ec.loads_t.p_set
+
+#%%
+
+# create a list of the buses you want to plot
+bus_list = ['GB1 1', 'GB1 18']
+
+# subset the bus_geodata attribute of the network to include only the selected buses
+bus_geodata_subset = n_39_ec.buses.loc[bus_list]
+
+# plot the selected buses using the subsetted bus_geodata attribute
+plt.figure(figsize=(8, 8))
+bus_geodata_subset.plot()
+plt.show()
+
+
+
+#%%
 # plot map of network
 n.plot()
 # list of generators
@@ -27,6 +48,21 @@ generators = n.generators
 n.storage_units.head()
 
 links = n_solved.links
+
+#%% identify any disconnected buses
+
+unconnected_buses = n_39_ec.buses.index.difference(n_39_ec.links.bus0).difference(n_39_ec.links.bus1)
+
+
+#%% plot clustered network
+
+fig, ax = plt.subplots(subplot_kw={"projection": ccrs.EuroPP()}, figsize=(9, 9))
+
+network = n_39.plot(
+       projection=ccrs.EuroPP(),
+       color_geomap={'ocean':'lightskyblue','land':'floralwhite'}
+       )
+
 
 #%% time-varying input data
 # load time series data at each bus

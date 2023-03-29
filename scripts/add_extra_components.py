@@ -55,6 +55,7 @@ import logging
 import numpy as np
 import pandas as pd
 import pypsa
+import xarray as xr
 from _helpers import configure_logging
 from add_electricity import (
     _add_missing_carriers_from_costs,
@@ -186,7 +187,51 @@ def attach_stores(n, costs, elec_opts):
             marginal_cost=costs.at["battery inverter", "marginal_cost"],
         )
 
+def attach_heat_demand(n, heat_profiles, cop_profiles, sources):
+    buses_AC = n.buses[n.buses.carrier== 'AC']
+    buses_i = buses_AC.index
+    bus_sub_dict = {k: buses_AC[k].values for k in ["x", "y", "country"]}
 
+    for source in sources:
+        with xr.open_dataset(getattr(heat_profiles, 'profile_' + source + '_source_heating')) as ds:
+            if ds.indexes["bus"].empty:
+                continue
+            # create heat buses
+            heat_buses_i = n.madd(
+                'Bus',
+                #!!! seem to be having a problem with the way buses are named... should I use suffix?
+                names = buses_i + f'_heat_{source}',
+                carrier = 'heat',
+                **bus_sub_dict
+                )  
+            # add heating demand to buses
+            heating_demand = ds['demand'].to_pandas().T
+            
+            n.madd(
+                'Load',
+                names = buses_i,
+                suffix = f'_{source}_heat',
+                carrier = 'heat',
+                bus = heat_buses_i,
+                p_set = heating_demand,
+                )
+            with xr.open_dataset(getattr(cop_profiles, 'profile_' + source + '_cop')) as cop:
+
+                cop = cop['cop'].to_pandas()
+            
+                # add heat pump links to heat buses
+                n.madd(
+                    "Link",
+                    names = buses_i,
+                    suffix =f' {source} heat pump',
+                    bus0 = buses_i,
+                    bus1 = heat_buses_i,
+                    carrier = f'{source} heat pump',
+                    efficiency=cop,
+                    p_nom_extendable=True,
+                    capital_cost = 0 
+                    )
+            
 def attach_hydrogen_pipelines(n, costs, elec_opts):
     ext_carriers = elec_opts["extendable_carriers"]
     as_stores = ext_carriers.get("Store", [])
@@ -244,8 +289,18 @@ if __name__ == "__main__":
 
     attach_storageunits(n, costs, elec_config)
     attach_stores(n, costs, elec_config)
+    
+    heat_sources = snakemake.config['electricity']['heat_sources']
+    #!!! add some sort of logger info about heat demand
+    attach_heat_demand(
+        n,
+        snakemake.input,
+        snakemake.input,
+        heat_sources
+        )
+    
     attach_hydrogen_pipelines(n, costs, elec_config)
-
+    
     add_nice_carrier_names(n, snakemake.config)
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
