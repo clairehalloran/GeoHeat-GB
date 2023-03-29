@@ -239,7 +239,7 @@ cutout = atlite.Cutout('cutouts/europe-2019-era5.nc')
 # in future work, this can be used to reflect adoption trends and differing shares of ground vs. air source
 
 # import population raster
-population = rio.open_rasterio('data/population_layout/UK_residential_population_2011_1_km.asc')
+population = rio.open_rasterio('data/population_layout/GB_residential_population_2011_1_km.tif')
 population.rio.set_spatial_dims(x_dim='x',y_dim='y')
 
 cutout_rio = cutout.data
@@ -259,14 +259,15 @@ share_ground = 0.25
 households_air = households * share_air
 households_ground = households * share_ground
 
+regions = gpd.read_file('resources/regions_onshore_elec_s_39.geojson')
+regions = regions.set_index("name").rename_axis("bus")
+buses = regions.index
+
 #%% calculate heating demand
 # testing uniform layout
 # households = cutout.uniform_layout()
 # need a shape that maps weather data to different buses
 # note that this is before the buses are clustered
-regions = gpd.read_file('resources/regions_onshore.geojson')
-regions = regions.set_index("name").rename_axis("bus")
-buses = regions.index
 
 # heating_demand, units = heat_demand_watson(cutout,
 #                                            'air',
@@ -278,61 +279,67 @@ buses = regions.index
 #                                            )
 # heating_demand.sel(bus='6005').plot() # I think this is the London bus
 
+#%% try matching build_temperature_profiles.py procedure
+
+# I = cutout.indicatormatrix(regions)
+
+
+# stacked_pop = households.stack(spatial=("y", "x"))
+
+
+# M = I.T.dot(np.diag(I.dot(stacked_pop[0])))
+# # use share of ASHP and convert population to number of households
+# M_air = M * share_air
+# M_ground = M * share_air
+
+# # nonzero_sum = M.sum(axis=0, keepdims=True)
+# # nonzero_sum[nonzero_sum == 0.0] = 1.0
+# # M_tilde = M / nonzero_sum
+# # population-weighted average temperature
+# ASHP_heating_demand = heat_demand_watson(cutout,
+#                                                  'air',
+#                                                  matrix=M_air.T,
+#                                                  index=regions.index,
+#                                                  per_unit = False
+#                                                  )
+# GSHP_heating_demand = heat_demand_watson(cutout,
+#                                                  'ground',
+#                                                  matrix=M_ground.T,
+#                                                  index=regions.index,
+#                                                  per_unit = False
+#                                                  )
 
 #%% ASHP vs GSHP
 ASHP_heating_demand, units = heat_demand_watson(cutout,
-                                           'air',
-                                           layout = households_air,
-                                           index=buses,
-                                           shapes = regions,
-                                           per_unit=False,
-                                           return_capacity=True,
-                                           )
+                                            'air',
+                                            layout = households_air,
+                                            index = buses,
+                                            shapes = regions,
+                                            per_unit=False,
+                                            return_capacity=True,
+                                            )
 # ASHP_heating_demand.sel(bus='6005').plot() # I think this is the London bus
 
 GSHP_heating_demand, units = heat_demand_watson(cutout,
-                                           'ground',
-                                           layout = households_ground,
-                                           index=buses,
-                                           shapes = regions,
-                                           per_unit=False,
-                                           return_capacity=True,
-                                           )
+                                            'ground',
+                                            layout = households_ground,
+                                            index=buses,
+                                            shapes = regions,
+                                            per_unit=False,
+                                            return_capacity=True,
+                                            )
 # GSHP_heating_demand.sel(bus='6005').plot() # I think this is the London bus
 
-#%% calculate COPs
-
-ASHP_COP = atlite.convert.coefficient_of_performance(cutout,
-                                      'air',
-                                      index=buses,
-                                      shapes = regions,
-                                      )
-
-# ASHP_COP.sel(bus='6005').plot()
-
-
-GSHP_COP = atlite.convert.coefficient_of_performance(cutout,
-                                      'soil',
-                                      index=buses,
-                                      shapes = regions,
-                                      )
-
-# GSHP_COP.sel(bus='6005').plot()
-
-#%% outputs: heating demand, COPs for each technology at each bus
+#%% outputs: heating demand at each bus
 # save to dataset as netcdf
 
 ASHP_heating_demand = ASHP_heating_demand.rename('demand')
-ASHP_COP = ASHP_COP.rename('cop')
 
-ASHP_heating_profiles = xr.combine_by_coords([ASHP_heating_demand,ASHP_COP])
-ASHP_heating_profiles.to_netcdf('resources/load_air_source_heating.nc')
+ASHP_heating_demand.to_netcdf('resources/load_air_source_heating.nc')
 
-GSHP_heating_demand = GSHP_heating_demand.rename('demand')
-GSHP_COP = GSHP_COP.rename('cop')
+ASHP_heating_demand = GSHP_heating_demand.rename('demand')
 
-GSHP_heating_profiles = xr.combine_by_coords([GSHP_heating_demand,GSHP_COP])
-GSHP_heating_profiles.to_netcdf('resources/load_ground_source_heating.nc')
+ASHP_heating_demand.to_netcdf('resources/load_ground_source_heating.nc')
 
 #%% example code for implementing this with snakemake from build_renewable_profiles.py
 # if __name__ == "__main__":
