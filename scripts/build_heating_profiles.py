@@ -96,19 +96,13 @@ Energy and Buildings, vol. 238, p. 110777, 2021, doi: 10.1016/j.enbuild.2021.110
 
 
 """
-# import functools
 import logging
-# import time
 
 import atlite
 import geopandas as gpd
 import numpy as np
 # import progressbar as pgb
 import xarray as xr
-# from _helpers import configure_logging
-# from dask.distributed import Client, LocalCluster
-# from pypsa.geo import haversine
-# from shapely.geometry import LineString
 import pandas as pd
 import rioxarray as rio
 import rasterio
@@ -262,52 +256,6 @@ households_ground = households * share_ground
 regions = gpd.read_file('resources/regions_onshore_elec_s_39.geojson')
 regions = regions.set_index("name").rename_axis("bus")
 buses = regions.index
-
-#%% calculate heating demand
-# testing uniform layout
-# households = cutout.uniform_layout()
-# need a shape that maps weather data to different buses
-# note that this is before the buses are clustered
-
-# heating_demand, units = heat_demand_watson(cutout,
-#                                            'air',
-#                                            layout = households,
-#                                            index=buses,
-#                                            shapes = regions,
-#                                            per_unit=False,
-#                                            return_capacity=True,
-#                                            )
-# heating_demand.sel(bus='6005').plot() # I think this is the London bus
-
-#%% try matching build_temperature_profiles.py procedure
-
-# I = cutout.indicatormatrix(regions)
-
-
-# stacked_pop = households.stack(spatial=("y", "x"))
-
-
-# M = I.T.dot(np.diag(I.dot(stacked_pop[0])))
-# # use share of ASHP and convert population to number of households
-# M_air = M * share_air
-# M_ground = M * share_air
-
-# # nonzero_sum = M.sum(axis=0, keepdims=True)
-# # nonzero_sum[nonzero_sum == 0.0] = 1.0
-# # M_tilde = M / nonzero_sum
-# # population-weighted average temperature
-# ASHP_heating_demand = heat_demand_watson(cutout,
-#                                                  'air',
-#                                                  matrix=M_air.T,
-#                                                  index=regions.index,
-#                                                  per_unit = False
-#                                                  )
-# GSHP_heating_demand = heat_demand_watson(cutout,
-#                                                  'ground',
-#                                                  matrix=M_ground.T,
-#                                                  index=regions.index,
-#                                                  per_unit = False
-#                                                  )
 
 #%% ASHP vs GSHP
 ASHP_heating_demand, units = heat_demand_watson(cutout,

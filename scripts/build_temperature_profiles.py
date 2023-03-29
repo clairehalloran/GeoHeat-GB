@@ -16,16 +16,8 @@ import logging
 import atlite
 import geopandas as gpd
 import numpy as np
-# import progressbar as pgb
-# import xarray as xr
-# from _helpers import configure_logging
-# from dask.distributed import Client, LocalCluster
-# from pypsa.geo import haversine
-# from shapely.geometry import LineString
-# import pandas as pd
 import rioxarray as rio
 import rasterio
-# from dask.distributed import Client, LocalCluster
 logger = logging.getLogger(__name__)
 
 
@@ -89,16 +81,3 @@ temp_soil = cutout.soil_temperature(matrix=M_tilde.T,
                               )
 
 temp_air.to_netcdf('resources/temp_ground_elec_s_39.nc')
-
-
-
-
-# #%% build temperature
-# ASHP_heating_demand, units = temperature(cutout,
-#                                            'air',
-#                                            layout = households_air,
-#                                            index=buses,
-#                                            shapes = regions,
-#                                            per_unit=False,
-#                                            return_capacity=True,
-#                                            )

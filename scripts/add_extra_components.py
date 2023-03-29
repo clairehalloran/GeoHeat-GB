@@ -187,66 +187,6 @@ def attach_stores(n, costs, elec_opts):
             marginal_cost=costs.at["battery inverter", "marginal_cost"],
         )
 
-#%%
-# n = pypsa.Network(r"C:\Users\clair\OneDrive - Nexus365\DPhil\pypsa-eur\networks\elec_s_39.nc")
-# sources = ['air','ground']
-# input_profiles = {
-#             f"profile_{source}_source_heating": "resources/" + f"profile_{source}_source_heating.nc"
-#             for source in sources
-#         }
-
-# # get bus info from electricity network
-# buses_AC = n.buses[n.buses.carrier== 'AC']
-# buses_i = buses_AC.index
-# bus_sub_dict = {k: buses_AC[k].values for k in ["x", "y", "country"]}
-
-# # for source in sources:
-# source = 'air'
-# with xr.open_dataset("resources/" + f"profile_{source}_source_heating.nc") as ds:
-#     # if ds.indexes["bus"].empty:
-#     #     continue
-#     # create heat buses
-#     heat_buses_i = n.madd(
-#         'Bus',
-#         names = buses_i + f'_heat_{source}',
-#         carrier = 'heat',
-#         units = 'MWh_th'
-#         **bus_sub_dict
-#         )  
-#     # add heating demand to buses
-#     heating_demand = ds['demand'].to_pandas().T
-#     # rename bus columns in heating demand
-#     heat_bus_dict = {buses_i[k] : heat_buses_i[k] for k in range(len(buses_i))}
-#     heating_demand = heating_demand.rename(columns = heat_bus_dict)
-    
-#     heat_loads = n.madd(
-#         'Load',
-#         names = buses_i + f'_{source}_heat',
-#         carrier = 'heat',
-#         bus = heat_buses_i,
-#         p_set = heating_demand,
-#         )
-#     with xr.open_dataset('resources/'+ f"cop_{source}_elec_s_39.nc") as cop:
-#         cop = cop['cop'].to_pandas()
-#         # cop = cop.add_prefix(f'{source} heat pump')
-#         # change index to match links?
-#         cop = cop.rename(columns = heat_bus_dict)
-    
-#         # add heat pump links to buses
-#         n.madd(
-#             "Link",
-#             names = heat_buses_i + ' pump',
-#             bus0 = buses_i,
-#             bus1 = heat_buses_i,
-#             carrier = f'{source} heat pump',
-#             efficiency=cop,
-#             p_nom_extendable=True,
-#             # capital_cost=3e5 # €/MWe/a
-#             )
-
-#%% copy of heating demand function
-
-#!!! how to map to clustered buses?
 def attach_heat_demand(n, heat_profiles, cop_profiles, sources):
     buses_AC = n.buses[n.buses.carrier== 'AC']
     buses_i = buses_AC.index
@@ -266,10 +206,8 @@ def attach_heat_demand(n, heat_profiles, cop_profiles, sources):
                 )  
             # add heating demand to buses
             heating_demand = ds['demand'].to_pandas().T
-            heat_bus_dict = {buses_i[k] : heat_buses_i[k] for k in range(len(buses_i))}
-            # heating_demand = heating_demand.rename(columns = heat_bus_dict)
             
-            heat_loads = n.madd(
+            n.madd(
                 'Load',
                 names = buses_i,
                 suffix = f'_{source}_heat',
@@ -280,9 +218,6 @@ def attach_heat_demand(n, heat_profiles, cop_profiles, sources):
             with xr.open_dataset(getattr(cop_profiles, 'profile_' + source + '_cop')) as cop:
 
                 cop = cop['cop'].to_pandas()
-                # cop = cop.add_prefix(f'{source} heat pump')
-                # change index to match links?
-                # cop = cop.rename(columns = heat_bus_dict)
             
                 # add heat pump links to heat buses
                 n.madd(
@@ -294,11 +229,9 @@ def attach_heat_demand(n, heat_profiles, cop_profiles, sources):
                     carrier = f'{source} heat pump',
                     efficiency=cop,
                     p_nom_extendable=True,
-                    capital_cost = 0 #!!! does adding this help?
-                    # capital_cost=3e5 # €/MWe/a
+                    capital_cost = 0 
                     )
             
-#%%
 def attach_hydrogen_pipelines(n, costs, elec_opts):
     ext_carriers = elec_opts["extendable_carriers"]
     as_stores = ext_carriers.get("Store", [])
@@ -361,8 +294,8 @@ if __name__ == "__main__":
     #!!! add some sort of logger info about heat demand
     attach_heat_demand(
         n,
-        snakemake.input, # what should this be???
-        snakemake.input, # what should this be???
+        snakemake.input,
+        snakemake.input,
         heat_sources
         )
     
