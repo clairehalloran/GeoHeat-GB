@@ -376,6 +376,25 @@ rule build_renewable_profiles:
     script:
         "scripts/build_renewable_profiles.py"
 
+rule build_temperature_profiles:
+    input:
+        regions = "resources/" + RDIR + "regions_onshore.geojson",
+        population = 'data/population_layout/GB_residential_population_2011_1_km.tif',
+        cutout="cutouts/"+ CDIR + config["heating"]["cutout"] + ".nc",
+    output:
+        temp_air = 'resources/' + RDIR + 'temp_air_elec_s{simpl}_{clusters}.nc',
+        temp_ground = 'resources/' + RDIR + 'temp_ground_elec_s{simpl}_{clusters}.nc'
+    script:
+        "scripts/build_temperature_profiles.py"
+
+rule build_cop_profiles:
+    input:
+        temp_air = 'resources/' + RDIR + 'temp_air_elec_s{simpl}_{clusters}.nc',
+        temp_ground = 'resources/' + RDIR + 'temp_ground_elec_s{simpl}_{clusters}.nc'
+    output:
+        
+    script:
+        "scripts/build_cop_profiles.py"
 
 rule build_hydro_profile:
     input:
