@@ -376,26 +376,6 @@ rule build_renewable_profiles:
     script:
         "scripts/build_renewable_profiles.py"
 
-rule build_temperature_profiles:
-    input:
-        regions = "resources/" + RDIR + "regions_onshore.geojson",
-        population = 'data/population_layout/GB_residential_population_2011_1_km.tif',
-        cutout="cutouts/"+ CDIR + config["heating"]["cutout"] + ".nc",
-    output:
-        temp_air = 'resources/' + RDIR + 'temp_air_elec_s{simpl}_{clusters}.nc',
-        temp_ground = 'resources/' + RDIR + 'temp_ground_elec_s{simpl}_{clusters}.nc'
-    script:
-        "scripts/build_temperature_profiles.py"
-
-rule build_cop_profiles:
-    input:
-        temp_air = 'resources/' + RDIR + 'temp_air_elec_s{simpl}_{clusters}.nc',
-        temp_ground = 'resources/' + RDIR + 'temp_ground_elec_s{simpl}_{clusters}.nc'
-    output:
-        
-    script:
-        "scripts/build_cop_profiles.py"
-
 rule build_hydro_profile:
     input:
         country_shapes="resources/" + RDIR + "country_shapes.geojson",
@@ -501,6 +481,17 @@ rule cluster_network:
     script:
         "scripts/cluster_network.py"
 
+rule build_temperature_profiles:
+    input:
+        regions = "resources/" + RDIR + "regions_onshore.geojson",
+        population = 'data/population_layout/GB_residential_population_2011_1_km.tif',
+        cutout="cutouts/"+ CDIR + config["heating"]["cutout"] + ".nc",
+    output:
+        temp_air = 'resources/' + RDIR + 'temp_air_elec_s{simpl}_{clusters}.nc',
+        temp_ground = 'resources/' + RDIR + 'temp_ground_elec_s{simpl}_{clusters}.nc'
+    script:
+        "scripts/build_temperature_profiles.py"
+
 rule build_cop_profiles:
     input:
         temp_ground="resources/" + RDIR + "temp_ground_elec_s{simpl}_{clusters}.nc",
@@ -517,10 +508,21 @@ rule build_cop_profiles:
     script:
         "scripts/build_cop_profiles.py"
 
+rule build_heating_profiles:
+    input:
+        regions = "resources/" + RDIR + "regions_onshore.geojson",
+        population = 'data/population_layout/GB_residential_population_2011_1_km.tif',
+        cutout = "cutouts/"+ CDIR + config["heating"]["cutout"] + ".nc",
+    output:
+        profile_air_source_heating = 'resources/' + RDIR + 'load_air_source_heating_elec_s{simpl}_{clusters}.nc',
+        profile_ground_source_heating = 'resources/' + RDIR + 'load_ground_source_heating_elec_s{simpl}_{clusters}.nc'
+    script:
+        "scripts/build_heating_profiles.py"
+
 rule add_extra_components:
     input:
-        profile_air_source_heating = "resources/" + RDIR + "load_air_source_heating.nc",
-        profile_ground_source_heating = "resources/" + RDIR + "load_ground_source_heating.nc",
+        profile_air_source_heating = 'resources/' + RDIR + 'load_air_source_heating_elec_s{simpl}_{clusters}.nc',
+        profile_ground_source_heating = 'resources/' + RDIR + 'load_ground_source_heating_elec_s{simpl}_{clusters}.nc',
         profile_air_cop = "resources/" + RDIR + "cop_air_elec_s{simpl}_{clusters}.nc",
         profile_ground_cop = "resources/" + RDIR + "cop_ground_elec_s{simpl}_{clusters}.nc",
         network="networks/" + RDIR + "elec_s{simpl}_{clusters}.nc",

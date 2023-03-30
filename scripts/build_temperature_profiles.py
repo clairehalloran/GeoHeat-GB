@@ -37,7 +37,7 @@ if __name__ == "__main__":
     nprocesses = int(snakemake.threads)
     noprogress = not snakemake.config["atlite"].get("show_progress", False)
     config = snakemake.config["heating"][snakemake.wildcards.source]
-    resource = config["source"]  # pv panel config / wind turbine config
+    # resource = config["source"]  # pv panel config / wind turbine config
 
     cluster = LocalCluster(n_workers=nprocesses, threads_per_worker=1)
     client = Client(cluster, asynchronous=True)

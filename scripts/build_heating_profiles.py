@@ -99,15 +99,15 @@ Energy and Buildings, vol. 238, p. 110777, 2021, doi: 10.1016/j.enbuild.2021.110
 import logging
 
 import atlite
+from dask.distributed import Client, LocalCluster
 import geopandas as gpd
 import numpy as np
-# import progressbar as pgb
 import xarray as xr
 import pandas as pd
 import rioxarray as rio
 import rasterio
 logger = logging.getLogger(__name__)
-#%%
+
 # define function for Watson et al. 2021 heating demand applicable to GB
 def convert_watson_heat_demand(ds, source, num_dwellings = 1):
     watson_filepath = f'data/{source}_source_heat_profiles.csv'
@@ -225,244 +225,56 @@ def heat_demand_watson(cutout, source, **params):
         **params,
         )
 
-#%% testing
-# load cutout
-cutout = atlite.Cutout('cutouts/europe-2019-era5.nc')
+if __name__ == "__main__":
+    if "snakemake" not in globals():
+        from _helpers import mock_snakemake
 
-# build layout DataArray-- how many households in each area will use a heat pump?
-# in future work, this can be used to reflect adoption trends and differing shares of ground vs. air source
+        snakemake = mock_snakemake(
+            "build_heat_demands",
+            simpl="",
+            clusters=48,
+        )
+    nprocesses = int(snakemake.threads)
+    cluster = LocalCluster(n_workers=nprocesses, threads_per_worker=1)
+    client = Client(cluster, asynchronous=True)
 
-# import population raster
-population = rio.open_rasterio('data/population_layout/GB_residential_population_2011_1_km.tif')
-population.rio.set_spatial_dims(x_dim='x',y_dim='y')
+    time = pd.date_range(freq="h", **snakemake.config["snapshots"])
+    cutout = atlite.Cutout(snakemake.input.cutout).sel(time=time)
+    share_air = snakemake.config['heating']['air']['share']
+    share_ground = snakemake.config['heating']['ground']['share']
 
-cutout_rio = cutout.data
-cutout_rio = cutout_rio.rio.write_crs('EPSG:4326')
-# transform to same CRS and resolution as cutout
-population_match = population.rio.reproject_match(cutout_rio,
-                                                  resampling = rasterio.enums.Resampling.sum)
-#!!! check household size           
-households = population_match.sel(band=1)/2.4
-# change large negative values to NaN-- may need to change to 0
-households = households.where(households>0.)
-households = households.fillna(0.)
-# set share of ASHP and GSHP across whole of UK-- if it sums to 1, 100% penetration
-share_air = 0.75
-share_ground = 0.25
+    regions = gpd.read_file(snakemake.input.regions)
+    buses = regions.index
 
-households_air = households * share_air
-households_ground = households * share_ground
+    population = rio.open_rasterio(snakemake.input.population)
+    population.rio.set_spatial_dims(x_dim='x',y_dim='y')
+    
+    cutout_rio = cutout.data
+    cutout_rio = cutout_rio.rio.write_crs('EPSG:4326')
+    # transform to same CRS and resolution as cutout
+    population_match = population.rio.reproject_match(cutout_rio,
+                                                      resampling = rasterio.enums.Resampling.sum)
+    households = population_match.sel(band=1)/2.4 # England and Wales average household size
+    # change large negative values to NaN-- may need to change to 0
+    households = households.where(households>0.)
+    households = households.fillna(0.)
+    households_air = households * share_air
+    households_ground = households * share_ground
 
-regions = gpd.read_file('resources/regions_onshore_elec_s_39.geojson')
-regions = regions.set_index("name").rename_axis("bus")
-buses = regions.index
+    ASHP_heating_demand = heat_demand_watson(cutout,
+                                                'air',
+                                                layout = households_air,
+                                                index = buses,
+                                                shapes = regions,
+                                                )
+    ASHP_heating_demand = ASHP_heating_demand.rename('demand')
+    ASHP_heating_demand.to_netcdf(snakemake.output.profile_air_source_heating)
 
-#%% ASHP vs GSHP
-ASHP_heating_demand, units = heat_demand_watson(cutout,
-                                            'air',
-                                            layout = households_air,
-                                            index = buses,
-                                            shapes = regions,
-                                            per_unit=False,
-                                            return_capacity=True,
-                                            )
-# ASHP_heating_demand.sel(bus='6005').plot() # I think this is the London bus
-
-GSHP_heating_demand, units = heat_demand_watson(cutout,
-                                            'ground',
-                                            layout = households_ground,
-                                            index=buses,
-                                            shapes = regions,
-                                            per_unit=False,
-                                            return_capacity=True,
-                                            )
-# GSHP_heating_demand.sel(bus='6005').plot() # I think this is the London bus
-
-#%% outputs: heating demand at each bus
-# save to dataset as netcdf
-
-ASHP_heating_demand = ASHP_heating_demand.rename('demand')
-
-ASHP_heating_demand.to_netcdf('resources/load_air_source_heating.nc')
-
-ASHP_heating_demand = GSHP_heating_demand.rename('demand')
-
-ASHP_heating_demand.to_netcdf('resources/load_ground_source_heating.nc')
-
-#%% example code for implementing this with snakemake from build_renewable_profiles.py
-# if __name__ == "__main__":
-#     if "snakemake" not in globals():
-#         from _helpers import mock_snakemake
-
-#         snakemake = mock_snakemake("build_renewable_profiles", technology="solar")
-#     configure_logging(snakemake)
-#     pgb.streams.wrap_stderr()
-
-#     nprocesses = int(snakemake.threads)
-#     noprogress = not snakemake.config["atlite"].get("show_progress", False)
-#     config = snakemake.config["renewable"][snakemake.wildcards.technology]
-#     resource = config["resource"]  # pv panel config / wind turbine config
-#     correction_factor = config.get("correction_factor", 1.0)
-#     capacity_per_sqkm = config["capacity_per_sqkm"]
-#     p_nom_max_meth = config.get("potential", "conservative")
-
-#     if isinstance(config.get("corine", {}), list):
-#         config["corine"] = {"grid_codes": config["corine"]}
-
-#     if correction_factor != 1.0:
-#         logger.info(f"correction_factor is set as {correction_factor}")
-
-#     cluster = LocalCluster(n_workers=nprocesses, threads_per_worker=1)
-#     client = Client(cluster, asynchronous=True)
-
-#     cutout = atlite.Cutout(snakemake.input["cutout"])
-#     regions = gpd.read_file(snakemake.input.regions)
-#     assert not regions.empty, (
-#         f"List of regions in {snakemake.input.regions} is empty, please "
-#         "disable the corresponding renewable technology"
-#     )
-#     # do not pull up, set_index does not work if geo dataframe is empty
-#     regions = regions.set_index("name").rename_axis("bus")
-#     buses = regions.index
-
-#     res = config.get("excluder_resolution", 100)
-#     excluder = atlite.ExclusionContainer(crs=3035, res=res)
-
-#     if config["natura"]:
-#         excluder.add_raster(snakemake.input.natura, nodata=0, allow_no_overlap=True)
-
-#     corine = config.get("corine", {})
-#     if "grid_codes" in corine:
-#         codes = corine["grid_codes"]
-#         excluder.add_raster(snakemake.input.corine, codes=codes, invert=True, crs=3035)
-#     if corine.get("distance", 0.0) > 0.0:
-#         codes = corine["distance_grid_codes"]
-#         buffer = corine["distance"]
-#         excluder.add_raster(
-#             snakemake.input.corine, codes=codes, buffer=buffer, crs=3035
-#         )
-
-#     # if "ship_threshold" in config:
-#     #     shipping_threshold = (
-#     #         config["ship_threshold"] * 8760 * 6
-#     #     )  # approximation because 6 years of data which is hourly collected
-#     #     func = functools.partial(np.less, shipping_threshold)
-#     #     excluder.add_raster(
-#     #         snakemake.input.ship_density, codes=func, crs=4326, allow_no_overlap=True
-#     #     )
-
-#     # if "max_depth" in config:
-#     #     # lambda not supported for atlite + multiprocessing
-#     #     # use named function np.greater with partially frozen argument instead
-#     #     # and exclude areas where: -max_depth > grid cell depth
-#     #     func = functools.partial(np.greater, -config["max_depth"])
-#     #     excluder.add_raster(snakemake.input.gebco, codes=func, crs=4326, nodata=-1000)
-
-#     # if "min_shore_distance" in config:
-#     #     buffer = config["min_shore_distance"]
-#     #     excluder.add_geometry(snakemake.input.country_shapes, buffer=buffer)
-
-#     # if "max_shore_distance" in config:
-#     #     buffer = config["max_shore_distance"]
-#     #     excluder.add_geometry(
-#     #         snakemake.input.country_shapes, buffer=buffer, invert=True
-#     #     )
-
-#     kwargs = dict(nprocesses=nprocesses, disable_progressbar=noprogress)
-#     if noprogress:
-#         logger.info("Calculate landuse availabilities...")
-#         start = time.time()
-#         availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
-#         duration = time.time() - start
-#         logger.info(f"Completed availability calculation ({duration:2.2f}s)")
-#     else:
-#         availability = cutout.availabilitymatrix(regions, excluder, **kwargs)
-
-#     area = cutout.grid.to_crs(3035).area / 1e6
-#     area = xr.DataArray(
-#         area.values.reshape(cutout.shape), [cutout.coords["y"], cutout.coords["x"]]
-#     )
-
-#     potential = capacity_per_sqkm * availability.sum("bus") * area
-#     func = getattr(cutout, resource.pop("method"))
-#     #!!! here I'll need to define my own function(s), rather than pulling from atlite
-#     resource["dask_kwargs"] = {"scheduler": client}
-#     capacity_factor = correction_factor * func(capacity_factor=True, **resource)
-#     layout = capacity_factor * area * capacity_per_sqkm
-#     #!!! heating profile here
-#     profile, capacities = func(
-#         matrix=availability.stack(spatial=["y", "x"]),
-#         layout=layout,
-#         index=buses,
-#         per_unit=True,
-#         return_capacity=True,
-#         **resource,
-#     )
-
-#     logger.info(f"Calculating maximal capacity per bus (method '{p_nom_max_meth}')")
-#     if p_nom_max_meth == "simple":
-#         p_nom_max = capacity_per_sqkm * availability @ area
-#     elif p_nom_max_meth == "conservative":
-#         max_cap_factor = capacity_factor.where(availability != 0).max(["x", "y"])
-#         p_nom_max = capacities / max_cap_factor
-#     else:
-#         raise AssertionError(
-#             'Config key `potential` should be one of "simple" '
-#             f'(default) or "conservative", not "{p_nom_max_meth}"'
-#         )
-
-#     logger.info("Calculate average distances.")
-#     layoutmatrix = (layout * availability).stack(spatial=["y", "x"])
-
-#     coords = cutout.grid[["x", "y"]]
-#     bus_coords = regions[["x", "y"]]
-
-#     average_distance = []
-#     centre_of_mass = []
-#     for bus in buses:
-#         row = layoutmatrix.sel(bus=bus).data
-#         nz_b = row != 0
-#         row = row[nz_b]
-#         co = coords[nz_b]
-#         distances = haversine(bus_coords.loc[bus], co)
-#         average_distance.append((distances * (row / row.sum())).sum())
-#         centre_of_mass.append(co.values.T @ (row / row.sum()))
-
-#     average_distance = xr.DataArray(average_distance, [buses])
-#     centre_of_mass = xr.DataArray(centre_of_mass, [buses, ("spatial", ["x", "y"])])
-
-#     ds = xr.merge(
-#         [
-#             (correction_factor * profile).rename("profile"),
-#             capacities.rename("weight"),
-#             p_nom_max.rename("p_nom_max"),
-#             potential.rename("potential"),
-#             average_distance.rename("average_distance"),
-#         ]
-#     )
-
-#     if snakemake.wildcards.technology.startswith("offwind"):
-#         logger.info("Calculate underwater fraction of connections.")
-#         offshore_shape = gpd.read_file(snakemake.input["offshore_shapes"]).unary_union
-#         underwater_fraction = []
-#         for bus in buses:
-#             p = centre_of_mass.sel(bus=bus).data
-#             line = LineString([p, regions.loc[bus, ["x", "y"]]])
-#             frac = line.intersection(offshore_shape).length / line.length
-#             underwater_fraction.append(frac)
-
-#         ds["underwater_fraction"] = xr.DataArray(underwater_fraction, [buses])
-
-#     # select only buses with some capacity and minimal capacity factor
-#     ds = ds.sel(
-#         bus=(
-#             (ds["profile"].mean("time") > config.get("min_p_max_pu", 0.0))
-#             & (ds["p_nom_max"] > config.get("min_p_nom_max", 0.0))
-#         )
-#     )
-
-#     if "clip_p_max_pu" in config:
-#         min_p_max_pu = config["clip_p_max_pu"]
-#         ds["profile"] = ds["profile"].where(ds["profile"] >= min_p_max_pu, 0)
-
-#     ds.to_netcdf(snakemake.output.profile)
+    GSHP_heating_demand = heat_demand_watson(cutout,
+                                                'ground',
+                                                layout = households_ground,
+                                                index=buses,
+                                                shapes = regions,
+                                                )
+    GSHP_heating_demand = GSHP_heating_demand.rename('demand')
+    GSHP_heating_demand.to_netcdf(snakemake.output.profile_ground_source_heating)
