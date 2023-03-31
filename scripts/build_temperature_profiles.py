@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     nprocesses = int(snakemake.threads)
     noprogress = not snakemake.config["atlite"].get("show_progress", False)
-    config = snakemake.config["heating"][snakemake.wildcards.source]
+    # config = snakemake.config["heating"][snakemake.wildcards.source]
     # resource = config["source"]  # pv panel config / wind turbine config
 
     cluster = LocalCluster(n_workers=nprocesses, threads_per_worker=1)
@@ -46,6 +46,7 @@ if __name__ == "__main__":
     cutout = atlite.Cutout(snakemake.input.cutout).sel(time=time)
 
     regions = gpd.read_file(snakemake.input.regions)
+
     assert not regions.empty, (
         f"List of regions in {snakemake.input.regions} is empty, please "
         "disable the corresponding renewable technology"
@@ -54,7 +55,7 @@ if __name__ == "__main__":
     regions = regions.set_index("name").rename_axis("bus")
     buses = regions.index
     # import population raster
-    population = rio.open_rasterio(snakemake.population)
+    population = rio.open_rasterio(snakemake.input.population)
     population.rio.set_spatial_dims(x_dim='x',y_dim='y')
     cutout_rio = cutout.data
     cutout_rio = cutout_rio.rio.write_crs('EPSG:4326')

@@ -483,7 +483,9 @@ rule cluster_network:
 
 rule build_temperature_profiles:
     input:
-        regions = "resources/" + RDIR + "regions_onshore.geojson",
+        regions = "resources/"
+        + RDIR
+        + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         population = 'data/population_layout/GB_residential_population_2011_1_km.tif',
         cutout="cutouts/"+ CDIR + config["heating"]["cutout"] + ".nc",
     output:
@@ -510,7 +512,9 @@ rule build_cop_profiles:
 
 rule build_heating_profiles:
     input:
-        regions = "resources/" + RDIR + "regions_onshore.geojson",
+        regions = "resources/"
+        + RDIR
+        + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
         population = 'data/population_layout/GB_residential_population_2011_1_km.tif',
         cutout = "cutouts/"+ CDIR + config["heating"]["cutout"] + ".nc",
     output:

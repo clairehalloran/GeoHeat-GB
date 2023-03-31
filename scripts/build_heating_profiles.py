@@ -244,6 +244,7 @@ if __name__ == "__main__":
     share_ground = snakemake.config['heating']['ground']['share']
 
     regions = gpd.read_file(snakemake.input.regions)
+    regions = regions.set_index("name").rename_axis("bus")
     buses = regions.index
 
     population = rio.open_rasterio(snakemake.input.population)
