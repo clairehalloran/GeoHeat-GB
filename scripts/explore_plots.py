@@ -24,7 +24,28 @@ cops = n_39_ec.links_t.efficiency
 
 loads = n_39_ec.loads_t.p_set
 
-#%%
+#%% plot regions in Britain
+
+import geopandas as gpd
+import random
+regions = gpd.read_file('resources/regions_onshore_elec_s_39.geojson')
+# regions = regions.set_index('name')
+
+regions_gb = regions[regions['name'].str.contains("GB1")]
+
+colors = [('#%06X' % random.randint(0, 0xFFFFFF)) for i in range(len(regions_gb))]
+
+ax = regions_gb.plot(color = colors)
+
+ax.set_axis_off()
+
+ax = regions_gb.plot()
+ax.set_axis_off()
+#%% plot network in Britain
+
+n_39.plot()
+
+
 
 # create a list of the buses you want to plot
 bus_list = ['GB1 1', 'GB1 18']

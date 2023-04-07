@@ -64,14 +64,25 @@ if __name__ == "__main__":
                                                       resampling = rasterio.enums.Resampling.sum)
     # change large negative values to nan
     population_match = population_match.where(population_match>0.)
-    
+    population_match = population_match.squeeze().drop('band')
+
+    if snakemake.config['heating']['single_GB_temperature']==True:
+        # calculate population-weighted national average hourly air and soil temperature
+        total_population = population_match.sum(dim=['x', 'y'])
+        weighted_temperature = (cutout.data['temperature'] * population_match).sum(dim=['x', 'y']) / total_population
+        weighted_soil_temperature = (cutout.data['soil temperature'] * population_match).sum(dim=['x', 'y']) / total_population
+
+        # use mask of population to replace temperature within Britain with average
+        cutout.data['temperature'] = cutout.data['temperature'].where(population_match.isnull(),weighted_temperature)
+        cutout.data['soil temperature'] = cutout.data['soil temperature'].where(population_match.isnull(),weighted_soil_temperature)
+
    # from 0.8.0 build_temperature_profiles.py
 
     I = cutout.indicatormatrix(regions)
 
     stacked_pop = population_match.stack(spatial=("y", "x"))
 
-    M = I.T.dot(np.diag(I.dot(stacked_pop[0])))
+    M = I.T.dot(np.diag(I.dot(stacked_pop)))
 
     nonzero_sum = M.sum(axis=0, keepdims=True)
     nonzero_sum[nonzero_sum == 0.0] = 1.0

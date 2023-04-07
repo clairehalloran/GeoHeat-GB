@@ -230,9 +230,9 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "build_heat_demands",
+            "build_heating_profiles",
             simpl="",
-            clusters=48,
+            clusters=39,
         )
     nprocesses = int(snakemake.threads)
     cluster = LocalCluster(n_workers=nprocesses, threads_per_worker=1)
@@ -255,12 +255,23 @@ if __name__ == "__main__":
     # transform to same CRS and resolution as cutout
     population_match = population.rio.reproject_match(cutout_rio,
                                                       resampling = rasterio.enums.Resampling.sum)
-    households = population_match.sel(band=1)/2.4 # England and Wales average household size
+    population_match = population_match.squeeze().drop('band')
+    households = population_match/2.4 # England and Wales average household size
     # change large negative values to NaN-- may need to change to 0
     households = households.where(households>0.)
     households = households.fillna(0.)
     households_air = households * share_air
     households_ground = households * share_ground
+
+    if snakemake.config['heating']['single_GB_temperature']==True:
+        # calculate population-weighted national average hourly air and soil temperature
+        total_population = population_match.sum(dim=['x', 'y'])
+        weighted_temperature = (cutout.data['temperature'] * population_match).sum(dim=['x', 'y']) / total_population
+        weighted_soil_temperature = (cutout.data['soil temperature'] * population_match).sum(dim=['x', 'y']) / total_population
+
+        # use mask of population to replace temperature within Britain with average
+        cutout.data['temperature'] = cutout.data['temperature'].where(population_match.isnull(),weighted_temperature)
+        cutout.data['soil temperature'] = cutout.data['soil temperature'].where(population_match.isnull(),weighted_soil_temperature)
 
     ASHP_heating_demand = heat_demand_watson(cutout,
                                                 'air',
