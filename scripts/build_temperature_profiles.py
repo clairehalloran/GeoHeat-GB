@@ -29,7 +29,7 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "build_temperature_profiles",
             simpl='',
-            clusters=48
+            clusters=39
             )
     configure_logging(snakemake)
     pgb.streams.wrap_stderr()
@@ -57,14 +57,16 @@ if __name__ == "__main__":
     # import population raster
     population = rio.open_rasterio(snakemake.input.population)
     population.rio.set_spatial_dims(x_dim='x',y_dim='y')
+    
     cutout_rio = cutout.data
     cutout_rio = cutout_rio.rio.write_crs('EPSG:4326')
     # transform to same CRS and resolution as cutout
     population_match = population.rio.reproject_match(cutout_rio,
                                                       resampling = rasterio.enums.Resampling.sum)
-    # change large negative values to nan
-    population_match = population_match.where(population_match>0.)
+    # # change large negative values to nan
     population_match = population_match.squeeze().drop('band')
+    population_match = population_match.where(population_match>0.)
+    population_match = population_match.fillna(0.)
 
     if snakemake.config['heating']['single_GB_temperature']==True:
         # calculate population-weighted national average hourly air and soil temperature
