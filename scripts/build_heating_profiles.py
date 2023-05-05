@@ -256,6 +256,8 @@ if __name__ == "__main__":
     population_match = population.rio.reproject_match(cutout_rio,
                                                       resampling = rasterio.enums.Resampling.sum)
     population_match = population_match.squeeze().drop('band')
+    population_match = population_match.where(population_match>0.)
+    # population_match = population_match.fillna(0.)
     households = population_match/2.4 # England and Wales average household size
     # change large negative values to NaN-- may need to change to 0
     households = households.where(households>0.)
@@ -267,12 +269,9 @@ if __name__ == "__main__":
         # calculate population-weighted national average hourly air and soil temperature
         total_population = population_match.sum(dim=['x', 'y'])
         weighted_temperature = (cutout.data['temperature'] * population_match).sum(dim=['x', 'y']) / total_population
-        weighted_soil_temperature = (cutout.data['soil temperature'] * population_match).sum(dim=['x', 'y']) / total_population
-
         # use mask of population to replace temperature within Britain with average
         cutout.data['temperature'] = cutout.data['temperature'].where(population_match.isnull(),weighted_temperature)
-        cutout.data['soil temperature'] = cutout.data['soil temperature'].where(population_match.isnull(),weighted_soil_temperature)
-
+    
     ASHP_heating_demand = heat_demand_watson(cutout,
                                                 'air',
                                                 layout = households_air,

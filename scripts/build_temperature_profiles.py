@@ -66,7 +66,6 @@ if __name__ == "__main__":
     # # change large negative values to nan
     population_match = population_match.squeeze().drop('band')
     population_match = population_match.where(population_match>0.)
-    population_match = population_match.fillna(0.)
 
     if snakemake.config['heating']['single_GB_temperature']==True:
         # calculate population-weighted national average hourly air and soil temperature
@@ -79,6 +78,8 @@ if __name__ == "__main__":
         cutout.data['soil temperature'] = cutout.data['soil temperature'].where(population_match.isnull(),weighted_soil_temperature)
 
    # from 0.8.0 build_temperature_profiles.py
+   # do not pull up-- can't fill with 0s until after replacing temperatures
+    population_match = population_match.fillna(0.)
 
     I = cutout.indicatormatrix(regions)
 
