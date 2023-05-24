@@ -140,3 +140,6 @@ n.plot(ax=ax,
        color_geomap=True,
        bus_sizes=0)
 ax.axis('off')
+
+#%% compare spatiotemporal temperature resolution
+

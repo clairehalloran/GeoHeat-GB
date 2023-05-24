@@ -425,4 +425,4 @@ if __name__ == "__main__":
         )
     )
 
-    fig.savefig(snakemake.output.ext, transparent=True, bbox_inches="tight")
+    fig.savefig(snakemake.output.ext, transparent=True, dpi=300, bbox_inches="tight")
