@@ -16,8 +16,8 @@ Build coefficient of performance (COP) time series for air- or ground-sourced
 heat pumps.
 The COP is a function of the temperature difference between
 source and sink.
-The quadratic regression used is based on Staffell et al. (2012)
-https://doi.org/10.1039/C2EE22653G.
+The quadratic regression used is based on Ruhnau et al. (2019)
+http://dx.doi.org/10.1038/s41597-019-0199-y
 """
 
 import xarray as xr
@@ -25,13 +25,19 @@ import xarray as xr
 
 def coefficient_of_performance(delta_T, source="air"):
     if source == "air":
-        return 6.81 - 0.121 * delta_T + 0.000630 * delta_T**2
+        return 6.08 - 0.09 * delta_T + 0.0005 * delta_T**2
     elif source == "ground":
-        return 8.77 - 0.150 * delta_T + 0.000734 * delta_T**2
+        return 10.29 - 0.21 * delta_T + 0.0012 * delta_T**2
     else:
         raise NotImplementedError("'source' must be one of  ['air', 'ground']")
 
-
+def calculate_sink_T(source_T, sink_type = 'radiator'):
+    if sink_type == 'radiator':
+        return 40. - 1.0 * source_T
+    elif sink_type =='floor':
+        return 30 - 0.5 * source_T
+    else:
+        raise NotImplementedError("'sink_type' must be one of ['radiator', 'floor']")
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -44,8 +50,8 @@ if __name__ == "__main__":
 
     for source in ["air", "ground"]:
         source_T = xr.open_dataarray(snakemake.input[f"temp_{source}"])
-
-        delta_T = snakemake.config["heat_pump_sink_T"] - source_T
+        sink_T = calculate_sink_T(source_T)
+        delta_T = sink_T - source_T
 
         cop = coefficient_of_performance(delta_T, source)
         cop = cop.rename('cop')
