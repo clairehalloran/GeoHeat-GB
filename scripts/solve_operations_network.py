@@ -130,7 +130,7 @@ def attach_hi_res_heat_demand(n, full_res_path, sources):
             heat_buses_i = n.madd(
                 'Bus',
                 #!!! seem to be having a problem with the way buses are named... should I use suffix?
-                names = buses_i + f'_heat_{source}',
+                names = buses_i + f'_heat_{source}_HR',
                 carrier = 'heat',
                 **bus_sub_dict
                 )  
@@ -140,7 +140,7 @@ def attach_hi_res_heat_demand(n, full_res_path, sources):
             n.madd(
                 'Load',
                 names = buses_i,
-                suffix = f'_{source}_heat',
+                suffix = f'_{source}_heat_HR',
                 carrier = 'heat',
                 bus = heat_buses_i,
                 p_set = heating_demand,
@@ -153,7 +153,7 @@ def attach_hi_res_heat_demand(n, full_res_path, sources):
                 n.madd(
                     "Link",
                     names = buses_i,
-                    suffix =f' {source} heat pump',
+                    suffix =f' {source} heat pump_HR',
                     bus0 = buses_i,
                     bus1 = heat_buses_i,
                     carrier = f'{source} heat pump',
