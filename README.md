@@ -8,6 +8,8 @@ This model includes high-resolution representation of the British power system a
 
 Similarly to PyPSA, GeoHeat-GB is distributed under the MIT license.
 
+When you use GeoHeat-GB, please cite the forthcoming paper:
+
 GeoHeat-GB is based on the PyPSA-Eur open model dataset of the European power system. When using GeoHeat-GB, please also credit the authors of PyPSA-Eur following their [guidelines](https://pypsa-eur.readthedocs.io/en/latest/#citing-pypsa-eur).
 
 ## Setup
