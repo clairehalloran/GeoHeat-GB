@@ -6,7 +6,7 @@ GeoHeat-GB includes high spatial and temporal resolution electricity demand proj
 
 ## Licenses and citation
 
-Similarly to PyPSA, GeoHeat-GB is distributed under the MIT license.
+GeoHeat-GB is distributed under the MIT license.
 
 When you use GeoHeat-GB, please cite the forthcoming paper:
 
