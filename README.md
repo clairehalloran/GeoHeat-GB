@@ -1,12 +1,14 @@
 # GeoHeat-GB: A power systems planning model for heat electrification in Britain
 
-GeoHeat-GB is an open-source power systems planning model for heat electrification in Britain. This model is built on the electricity-only [PyPSA-Eur](https://pypsa-eur.readthedocs.io) open model dataset of the European power system. 
+GeoHeat-GB is an open-source power systems planning model for heat electrification in Britain with high spatial resolution. This model is built on the electricity-only [PyPSA-Eur](https://pypsa-eur.readthedocs.io) open model dataset of the European power system. 
 
-This model includes high-resolution representation of the British power system and low-resolution resolution representation of interconnected grids. 
+GeoHeat-GB includes high spatial and temporal resolution electricity demand projections for residential heat pump adoption. The level of residential air- and ground-source heat pump adoption is exogenously determined and can be specified in the `config.yaml` file. This model also includes a high-resolution representation of the British power system and low-resolution resolution representation of interconnected grids. 
 
 ## Licenses and citation
 
-Similarly to PyPSA, PyPSA-UK is distributed under the MIT license.
+Similarly to PyPSA, GeoHeat-GB is distributed under the MIT license.
+
+When you use GeoHeat-GB, please cite the forthcoming paper:
 
 GeoHeat-GB is based on the PyPSA-Eur open model dataset of the European power system. When using GeoHeat-GB, please also credit the authors of PyPSA-Eur following their [guidelines](https://pypsa-eur.readthedocs.io/en/latest/#citing-pypsa-eur).
 
@@ -28,31 +30,28 @@ Install the python dependencies (which are the same as those of PyPSA-Eur) using
 
 Install a solver of your choice that is compatible with PyPSA following [these instructions](https://pypsa.readthedocs.io/en/latest/installation.html#getting-a-solver-for-optimisation).
 
-The model can be configured in a similar way to PyPSA-Eur using the configuration file `config.yaml`. An example file with the heating options is included as `config.heat.yaml`. The configuration options added in the heating section are:
+The model can be configured in a similar way to PyPSA-Eur using the configuration file `config.yaml`. An example file with the heating options is included as `config.heat.yaml`. The configuration options added in the `heating` section are:
 
 ```
-# New config info for heating
-heat_pump_sink_T: 55. # Celsius
 heating:
   cutout: europe-2019-era5
-  single_GB_temperature: false
+  single_GB_temperature: true
+  heat_sources: [air, ground]
+  heat_pump_sink_T: 55. # Celsius
   air:
     share: 0.75
-    resource:
-      method: air
   ground:
     share: 0.25
-    resource:
-      method: ground
 ```
-The `heat_pump_sink_T` parameter is the output temperature in degrees Celsius for all heat pumps considered and is used to calculate hourly COP values. The heating cutout provides the Atlite cutout used to calulcate heating demand and COP values. The `single_GB_temperature` provides the option to use spatially uniform temperatures to calculate heating demand and COP values in Britain, see forthcoming paper for detailed discussion. For both air- and ground-source heat pumps, the share of British households using the technology can be specified with a value between 0 and 1 for the `share` parameter. A value of 0 indicates that no households use the technology, and a value of 1 indicates that all households use the technology. Currently technology adoption is uniform across all parts of Britain.
+The heating `cutout` parameter provides name of the file used to create the [Atlite](https://atlite.readthedocs.io/en/latest/) cutout used to calulcate heating demand and COP values. 
 
-The heat sources used by heat pumps are also listed in the electricity section of the config file:
-```
-electricity:
-...
-  heat_sources: [air, ground]
-```
+The `single_GB_temperature` parameter provides the option to use spatially uniform temperatures to calculate heating demand and COP values in Britain. See forthcoming paper for detailed discussion. 
+
+The `heat_pump_sink_T` parameter is the output temperature in degrees Celsius for all heat pumps considered and is used to calculate hourly COP values. 
+
+For both air- and ground-source heat pumps, the share of British households using the technology can be specified with a value between 0 and 1 for the `share` parameter. A value of 0 indicates that no households use the technology, and a value of 1 indicates that all households use the technology. Currently technology adoption is uniform across all parts of Britain.
+
+For additional configuration options, refer to the [PyPSA-Eur documentation on configuration](https://pypsa-eur.readthedocs.io/en/latest/configuration.html).
 
 ## Running the model
 
