@@ -8,6 +8,7 @@ __pycache__
 *dconf
 gurobi.log
 .vscode
+*.DS_Store
 
 /bak
 /resources
@@ -16,9 +17,9 @@ gurobi.log
 /benchmarks
 /logs
 /notebooks
-/data
-/data/links_p_nom.csv
-/data/population_layout
+/data/*
+!data/population_layout
+!data/*_source_heat_profiles.csv
 /cutouts
 /dask-worker-space
 
