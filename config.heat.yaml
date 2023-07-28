@@ -77,7 +77,6 @@ electricity:
 
   conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
   renewable_carriers: [solar, onwind, offwind-ac, offwind-dc, hydro]
-  heat_sources: [air, ground]
 
   estimate_renewable_capacities:
     enable: true
