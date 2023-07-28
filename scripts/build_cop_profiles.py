@@ -41,11 +41,10 @@ if __name__ == "__main__":
             simpl="",
             clusters=48,
         )
-
-    for source in ["air", "ground"]:
+    for source in snakemake.config['heating']['heat_sources']:
         source_T = xr.open_dataarray(snakemake.input[f"temp_{source}"])
 
-        delta_T = snakemake.config["heat_pump_sink_T"] - source_T
+        delta_T = snakemake.config['heating']["heat_pump_sink_T"] - source_T
 
         cop = coefficient_of_performance(delta_T, source)
         cop = cop.rename('cop')

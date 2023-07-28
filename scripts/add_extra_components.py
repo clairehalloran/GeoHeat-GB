@@ -290,7 +290,7 @@ if __name__ == "__main__":
     attach_storageunits(n, costs, elec_config)
     attach_stores(n, costs, elec_config)
     
-    heat_sources = snakemake.config['electricity']['heat_sources']
+    heat_sources = snakemake.config['heating']['heat_sources']
     #!!! add some sort of logger info about heat demand
     attach_heat_demand(
         n,
