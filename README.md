@@ -41,7 +41,7 @@ heating:
   ground:
     share: 0.25
 ```
-The heating `cutout` parameter provides name of the file used to create the Atlite cutout used to calulcate heating demand and COP values. 
+The heating `cutout` parameter provides name of the file used to create the [Atlite](https://atlite.readthedocs.io/en/latest/) cutout used to calulcate heating demand and COP values. 
 
 The `single_GB_temperature` parameter provides the option to use spatially uniform temperatures to calculate heating demand and COP values in Britain. See forthcoming paper for detailed discussion. 
 
