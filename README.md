@@ -1,8 +1,8 @@
 # GeoHeat-GB: A power systems planning model for heat electrification in Britain
 
-GeoHeat-GB is an open-source power systems planning model for heat electrification in Britain. This model is built on the electricity-only [PyPSA-Eur](https://pypsa-eur.readthedocs.io) open model dataset of the European power system. 
+GeoHeat-GB is an open-source power systems planning model for heat electrification in Britain with high spatial resolution. This model is built on the electricity-only [PyPSA-Eur](https://pypsa-eur.readthedocs.io) open model dataset of the European power system. 
 
-This model includes high-resolution representation of the British power system and low-resolution resolution representation of interconnected grids. 
+GeoHeat-GB includes high spatial and temporal resolution electricity demand projections for residential heat pump adoption. The level of residential air- and ground-source heat pump adoption is exogenously determined and can be specified in the `config.yaml` file. This model also includes a high-resolution representation of the British power system and low-resolution resolution representation of interconnected grids. 
 
 ## Licenses and citation
 
