@@ -49,6 +49,8 @@ The `heat_pump_sink_T` parameter is the output temperature in degrees Celsius fo
 
 For both air- and ground-source heat pumps, the share of British households using the technology can be specified with a value between 0 and 1 for the `share` parameter. A value of 0 indicates that no households use the technology, and a value of 1 indicates that all households use the technology. Currently technology adoption is uniform across all parts of Britain.
 
+For additional configuration options, refer to the [PyPSA-Eur documentation on configuration](https://pypsa-eur.readthedocs.io/en/latest/configuration.html).
+
 ## Running the model
 
 Like the PyPSA-Eur model, this model is built through a snakemake workflow. Users are referred to the [PyPSA-Eur documentation](https://pypsa-eur.readthedocs.io) for detailed instructions on running the model.
