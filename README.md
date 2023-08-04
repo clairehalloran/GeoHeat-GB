@@ -10,7 +10,12 @@ GeoHeat-GB is distributed under the MIT license.
 
 When you use GeoHeat-GB, please cite the forthcoming paper:
 
-GeoHeat-GB is based on the PyPSA-Eur open model dataset of the European power system. When using GeoHeat-GB, please also credit the authors of PyPSA-Eur following their [guidelines](https://pypsa-eur.readthedocs.io/en/latest/#citing-pypsa-eur).
+GeoHeat-GB is based on the PyPSA-Eur open model dataset of the European power system. When using GeoHeat-GB, please also credit the authors of PyPSA-Eur following their [guidelines](https://pypsa-eur.readthedocs.io/en/latest/#citing-pypsa-eur). You should also note the licenses used in their databundle.
+
+### Data used in this model
+The model uses historical temperature data to project hourly residential heating at high spatial resolution using [heating demand profiles](https://figshare.com/articles/dataset/Monitored_heat_pump_heat_demand_profiles_-_supplementary_information_to_Watson_et_al_2021_/13547447) based on the Renewable Heat Premium Payment trials. The development of these profiles is described in the paper [How will heat pumps alter national half-hourly heat demands? Empirical modelling based on GB field trials](https://doi.org/10.1016/j.enbuild.2021.110777). These profiles are used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and have been modified from half-hourly to hourly to match the temporal resolution of other generation and demand data used in the model.
+
+The model uses [high spatial resolution population data](https://catalogue.ceh.ac.uk/documents/0995e94d-6d42-40c1-8ed4-5090d82471e1) that contains data supplied by Natural Environment Research Council. ©NERC (Centre for Ecology & Hydrology). Contains National Statistics data © Crown copyright and database right 2011. These data are used under the [Open Government License](https://eidc.ceh.ac.uk/licences/open-government-licence-ceh-ons/plain). If you use this model, you must cite [UK gridded population 2011 based on Census 2011 and Land Cover Map 2015](https://doi.org/10.5285/0995e94d-6d42-40c1-8ed4-5090d82471e1).
 
 ## Setup
 
@@ -57,7 +62,3 @@ For additional configuration options, refer to the [PyPSA-Eur documentation on c
 
 Like the PyPSA-Eur model, this model is built through a snakemake workflow. Users are referred to the [PyPSA-Eur documentation](https://pypsa-eur.readthedocs.io) for detailed instructions on running the model.
 
-## Data
-The model uses historical temperature data to project hourly residential heating at high spatial resolution using [heating demand profiles](https://figshare.com/articles/dataset/Monitored_heat_pump_heat_demand_profiles_-_supplementary_information_to_Watson_et_al_2021_/13547447) based on the Renewable Heat Premium Payment trials. The development of these profiles is described in the paper [How will heat pumps alter national half-hourly heat demands? Empirical modelling based on GB field trials](https://doi.org/10.1016/j.enbuild.2021.110777). These profiles are used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and have been modified from half-hourly to hourly to match the temporal resolution of other generation and demand data used in the model.
-
-The model uses [high spatial resolution population data](https://catalogue.ceh.ac.uk/documents/0995e94d-6d42-40c1-8ed4-5090d82471e1) that contains data supplied by Natural Environment Research Council. ©NERC (Centre for Ecology & Hydrology). Contains National Statistics data © Crown copyright and database right 2011. These data are used under the [Open Government License](https://eidc.ceh.ac.uk/licences/open-government-licence-ceh-ons/plain). If you use this model, you must cite [UK gridded population 2011 based on Census 2011 and Land Cover Map 2015](https://doi.org/10.5285/0995e94d-6d42-40c1-8ed4-5090d82471e1).
