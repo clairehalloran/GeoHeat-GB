@@ -6,7 +6,7 @@ GeoHeat-GB includes high spatial and temporal resolution electricity demand proj
 
 ## Licenses and citation
 
-GeoHeat-GB is distributed under the MIT license.
+GeoHeat-GB is distributed under the MIT license. Please note that some of the data used in this model has differences licenses.
 
 When you use GeoHeat-GB, please cite the forthcoming paper:
 
