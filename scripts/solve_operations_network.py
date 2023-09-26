@@ -50,8 +50,10 @@ from pathlib import Path
 
 import numpy as np
 import pypsa
+import xarray as xr
 from _helpers import configure_logging
 from solve_network import prepare_network, solve_network
+from add_extra_components import attach_heat_demand
 from vresutils.benchmark import memory_logger
 
 logger = logging.getLogger(__name__)
@@ -99,8 +101,70 @@ def set_parameters_from_optimized(n, n_optim):
         stor_extend_i, fill_value=0.0
     )
     n.stores.loc[stor_extend_i, "e_nom_extendable"] = False
-
     return n
+
+def remove_heat_demand(n, sources):
+    buses_AC = n.buses[n.buses.carrier== 'AC']
+    buses_i = buses_AC.index
+    logger.info('Removing heating buses, loads, and links.')
+    for source in sources:
+        n.mremove('Bus', buses_i+f'_heat_{source}')
+        # remove heating load from heating buses
+        n.mremove('Load', buses_i + f'_{source}_heat')
+        # remove heating links with COP
+        n.mremove('Link', buses_i + f' {source} heat pump')
+        return n
+
+
+
+def attach_hi_res_heat_demand(n, full_res_path, sources):
+    buses_AC = n.buses[n.buses.carrier== 'AC']
+    buses_i = buses_AC.index
+    bus_sub_dict = {k: buses_AC[k].values for k in ["x", "y", "country"]}
+
+    for source in sources:
+        with xr.open_dataset(full_res_path + 'load_' + source + '_source_heating_elec_s_39.nc') as ds:
+            if ds.indexes["bus"].empty:
+                continue
+            # create heat buses
+            heat_buses_i = n.madd(
+                'Bus',
+                #!!! seem to be having a problem with the way buses are named... should I use suffix?
+                names = buses_i + f'_heat_{source}_HR',
+                carrier = 'heat',
+                **bus_sub_dict
+                )  
+            # add heating demand to buses
+            heating_demand = ds['demand'].to_pandas().T
+            
+            n.madd(
+                'Load',
+                names = buses_i,
+                suffix = f'_{source}_heat_HR',
+                carrier = 'heat',
+                bus = heat_buses_i,
+                p_set = heating_demand,
+                )
+            with xr.open_dataset(full_res_path + 'cop_' + source + '_elec_s_39.nc') as cop:
+
+                cop = cop['cop'].to_pandas()
+            
+                # add heat pump links to heat buses
+                n.madd(
+                    "Link",
+                    names = buses_i,
+                    suffix =f' {source} heat pump_HR',
+                    bus0 = buses_i,
+                    bus1 = heat_buses_i,
+                    carrier = f'{source} heat pump',
+                    efficiency=cop,
+                    p_nom_extendable=True,
+                    capital_cost = 0 
+                    )
+            
+
+# create a function to calculate full-resolution heating demand? need to redo several steps
+# from snakemake workflow
 
 
 if __name__ == "__main__":
@@ -110,9 +174,9 @@ if __name__ == "__main__":
         snakemake = mock_snakemake(
             "solve_operations_network",
             simpl="",
-            clusters="5",
-            ll="copt",
-            opts="Co2L-BAU-24H",
+            clusters="39",
+            ll="v1.15",
+            opts="Co2L0.1-EQ0.95c",
         )
     configure_logging(snakemake)
 
@@ -123,13 +187,28 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.unprepared)
     n_optim = pypsa.Network(snakemake.input.optimized)
     n = set_parameters_from_optimized(n, n_optim)
+    
     del n_optim
 
+    # if single GB temeprature is True, need to remove extra components for heating
+    if snakemake.config['heating']['single_GB_temperature']==True:
+        # need to remove extra components for heating
+        heat_sources = snakemake.config['electricity']['heat_sources']
+        remove_heat_demand(n, heat_sources)
+        # and add new ones based on high-resolution temperature
+        # !!! in the future, create a Snakemake rule that will generate full-resolution profiles
+        full_res_path = '/Users/mans3904/Library/CloudStorage/OneDrive-Nexus365/DPhil/GeoHeat-GB-private/resources/full-resolution/'
+        attach_hi_res_heat_demand(n, 
+                                  full_res_path, 
+                                  heat_sources
+                                  )
     opts = snakemake.wildcards.opts.split("-")
     snakemake.config["solving"]["options"]["skip_iterations"] = False
 
     fn = getattr(snakemake.log, "memory", None)
     with memory_logger(filename=fn, interval=30.0) as mem:
+        # add load shedding based on UK VoLL of £6000/MWh
+        snakemake.config["solving"]["options"]['load_shedding']=6.9
         n = prepare_network(n, snakemake.config["solving"]["options"])
         n = solve_network(
             n,
