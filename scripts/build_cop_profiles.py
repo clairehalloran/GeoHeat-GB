@@ -31,13 +31,14 @@ def coefficient_of_performance(delta_T, source="air"):
     else:
         raise NotImplementedError("'source' must be one of  ['air', 'ground']")
 
-def calculate_sink_T(source_T, sink_type = 'radiator'):
+def calculate_sink_T(amb_T, sink_type = 'radiator'):
     if sink_type == 'radiator':
-        return 40. - 1.0 * source_T
+        return 40. - 1.0 * amb_T
     elif sink_type =='floor':
-        return 30 - 0.5 * source_T
+        return 30 - 0.5 * amb_T
     else:
         raise NotImplementedError("'sink_type' must be one of ['radiator', 'floor']")
+    
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
@@ -50,9 +51,10 @@ if __name__ == "__main__":
 
     for source in ["air", "ground"]:
         source_T = xr.open_dataarray(snakemake.input[f"temp_{source}"])
-        sink_T = calculate_sink_T(source_T)
-        delta_T = sink_T - source_T
-
+        amb_T = xr.open_dataarray(snakemake.input["temp_air"])
+        sink_T = calculate_sink_T(amb_T)
+        # minimum delta T of 15 C for warm 
+        delta_T = xr.where(sink_T - source_T > 15.0, sink_T - source_T, 15.0)
         cop = coefficient_of_performance(delta_T, source)
         cop = cop.rename('cop')
 
