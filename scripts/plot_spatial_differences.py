@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 # het_base = r'C:\Users\clair\OneDrive - Nexus365\DPhil\Spatiotemporal heating results\20230429 39 temperature regions'
 # homo_base = r'C:\Users\clair\OneDrive - Nexus365\DPhil\Spatiotemporal heating results\20230128 single temperature region'
 
-het_base = r'C:\Users\clair\OneDrive - Nexus365\DPhil\Spatiotemporal heating results\20230506 39 temperature regions'
-homo_base = r'C:\Users\clair\OneDrive - Nexus365\DPhil\Spatiotemporal heating results\20230506 single temperature region'
+het_base = r'/Users/mans3904/Library/CloudStorage/OneDrive-Nexus365/DPhil/Spatiotemporal heating results/20230609 39 temperature region battery storage'
+homo_base = r'/Users/mans3904/Library/CloudStorage/OneDrive-Nexus365/DPhil/Spatiotemporal heating results/20230607 single temperature region battery storage'
 
 #%% check differences in heating demand-- map demand at peak time using local temp and national temp
 
