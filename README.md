@@ -9,7 +9,7 @@ GeoHeat-GB includes high spatial and temporal resolution electricity demand proj
 GeoHeat-GB is distributed under the MIT license. Please note that some of the data used in this model have different licenses.
 
 When you use GeoHeat-GB, please cite the following paper:
-- Claire Halloran, Jesus Lizana, Filiberto Fele, Malcolm McCulloch, Data-based, high spatiotemporal resolution heat pump demand for power system planning, Applied Energy, Volume 355, 2024, 122331, [https://doi.org/10.1016/j.apenergy.2023.122331].
+- Claire Halloran, Jesus Lizana, Filiberto Fele, Malcolm McCulloch, Data-based, high spatiotemporal resolution heat pump demand for power system planning, Applied Energy, Volume 355, 2024, 122331, https://doi.org/10.1016/j.apenergy.2023.122331.
 
 Please use the following BibTex:
 ```
