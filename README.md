@@ -6,9 +6,25 @@ GeoHeat-GB includes high spatial and temporal resolution electricity demand proj
 
 ## Licenses and citation
 
-GeoHeat-GB is distributed under the MIT license. Please note that some of the data used in this model has differences licenses.
+GeoHeat-GB is distributed under the MIT license. Please note that some of the data used in this model have different licenses.
 
-When you use GeoHeat-GB, please cite the forthcoming paper:
+When you use GeoHeat-GB, please cite the following paper:
+- Claire Halloran, Jesus Lizana, Filiberto Fele, Malcolm McCulloch, Data-based, high spatiotemporal resolution heat pump demand for power system planning, Applied Energy, Volume 355, 2024, 122331, [https://doi.org/10.1016/j.apenergy.2023.122331].
+
+Please use the following BibTex:
+```
+@article{Halloran2024,
+	title = {Data-based, high spatiotemporal resolution heat pump demand for power system planning},
+	volume = {355},
+	issn = {0306-2619},
+	url = {https://www.sciencedirect.com/science/article/pii/S0306261923016951},
+	doi = {https://doi.org/10.1016/j.apenergy.2023.122331},
+	journal = {Applied Energy},
+	author = {Halloran, Claire and Lizana, Jesus and Fele, Filiberto and McCulloch, Malcolm},
+	year = {2024},
+	pages = {122331},
+}
+```
 
 GeoHeat-GB is based on the PyPSA-Eur open model dataset of the European power system. When using GeoHeat-GB, please also credit the authors of PyPSA-Eur following their [guidelines](https://pypsa-eur.readthedocs.io/en/latest/#citing-pypsa-eur). You should also note the licenses used in their databundle.
 
