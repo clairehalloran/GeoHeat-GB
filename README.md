@@ -65,7 +65,7 @@ heating:
 ```
 The heating `cutout` parameter provides name of the file used to create the [Atlite](https://atlite.readthedocs.io/en/latest/) cutout used to calulcate heating demand and COP values. 
 
-The `single_GB_temperature` parameter provides the option to use spatially uniform temperatures to calculate heating demand and COP values in Britain. See forthcoming paper for detailed discussion. 
+The `single_GB_temperature` parameter provides the option to use spatially uniform temperatures to calculate heating demand and COP values in Britain. See [this paper](https://doi.org/10.1016/j.apenergy.2023.122331) for detailed discussion. 
 
 For both air- and ground-source heat pumps, the share of British households using the technology can be specified with a value between 0 and 1 for the `share` parameter. A value of 0 indicates that no households use the technology, and a value of 1 indicates that all households use the technology. Currently technology adoption is uniform across all parts of Britain.
 
