@@ -51,7 +51,9 @@ from pathlib import Path
 import numpy as np
 import pypsa
 import xarray as xr
+import re
 from _helpers import configure_logging
+from prepare_network import add_co2limit
 from solve_network import prepare_network, solve_network
 from add_extra_components import attach_heat_demand
 from vresutils.benchmark import memory_logger
@@ -187,7 +189,8 @@ if __name__ == "__main__":
     n = pypsa.Network(snakemake.input.unprepared)
     n_optim = pypsa.Network(snakemake.input.optimized)
     n = set_parameters_from_optimized(n, n_optim)
-    
+    Nyears = n.snapshot_weightings.objective.sum() / 8760.0
+
     del n_optim
 
     # if single GB temeprature is True, need to remove extra components for heating
@@ -210,6 +213,17 @@ if __name__ == "__main__":
         # add load shedding based on UK VoLL of £6000/MWh
         snakemake.config["solving"]["options"]['load_shedding']=6.9
         n = prepare_network(n, snakemake.config["solving"]["options"])
+        # !!! try to add CO2 limit
+        for o in opts:
+            if "Co2L" in o:
+                m = re.findall("[0-9]*\.?[0-9]+$", o)
+                if len(m) > 0:
+                    co2limit = float(m[0]) * snakemake.config["electricity"]["co2base"]
+                    add_co2limit(n, co2limit, Nyears)
+                    logger.info("Setting CO2 limit according to wildcard value.")
+                else:
+                    add_co2limit(n, snakemake.config["electricity"]["co2limit"], Nyears)
+                    logger.info("Setting CO2 limit according to config value.")
         n = solve_network(
             n,
             snakemake.config,
