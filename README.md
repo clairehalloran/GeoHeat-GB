@@ -6,9 +6,25 @@ GeoHeat-GB includes high spatial and temporal resolution electricity demand proj
 
 ## Licenses and citation
 
-GeoHeat-GB is distributed under the MIT license. Please note that some of the data used in this model has differences licenses.
+GeoHeat-GB is distributed under the MIT license. Please note that some of the data used in this model have different licenses.
 
-When you use GeoHeat-GB, please cite the forthcoming paper:
+When you use GeoHeat-GB, please cite the following paper:
+- Claire Halloran, Jesus Lizana, Filiberto Fele, Malcolm McCulloch, Data-based, high spatiotemporal resolution heat pump demand for power system planning, Applied Energy, Volume 355, 2024, 122331, https://doi.org/10.1016/j.apenergy.2023.122331.
+
+Please use the following BibTex:
+```
+@article{Halloran2024,
+	title = {Data-based, high spatiotemporal resolution heat pump demand for power system planning},
+	volume = {355},
+	issn = {0306-2619},
+	url = {https://www.sciencedirect.com/science/article/pii/S0306261923016951},
+	doi = {https://doi.org/10.1016/j.apenergy.2023.122331},
+	journal = {Applied Energy},
+	author = {Halloran, Claire and Lizana, Jesus and Fele, Filiberto and McCulloch, Malcolm},
+	year = {2024},
+	pages = {122331},
+}
+```
 
 GeoHeat-GB is based on the PyPSA-Eur open model dataset of the European power system. When using GeoHeat-GB, please also credit the authors of PyPSA-Eur following their [guidelines](https://pypsa-eur.readthedocs.io/en/latest/#citing-pypsa-eur). You should also note the licenses used in their databundle.
 
@@ -42,7 +58,6 @@ heating:
   cutout: europe-2019-era5
   single_GB_temperature: true
   heat_sources: [air, ground]
-  heat_pump_sink_T: 55. # Celsius
   air:
     share: 0.75
   ground:
@@ -50,9 +65,7 @@ heating:
 ```
 The heating `cutout` parameter provides name of the file used to create the [Atlite](https://atlite.readthedocs.io/en/latest/) cutout used to calulcate heating demand and COP values. 
 
-The `single_GB_temperature` parameter provides the option to use spatially uniform temperatures to calculate heating demand and COP values in Britain. See forthcoming paper for detailed discussion. 
-
-The `heat_pump_sink_T` parameter is the output temperature in degrees Celsius for all heat pumps considered and is used to calculate hourly COP values. 
+The `single_GB_temperature` parameter provides the option to use spatially uniform temperatures to calculate heating demand and COP values in Britain. See [this paper](https://doi.org/10.1016/j.apenergy.2023.122331) for detailed discussion. 
 
 For both air- and ground-source heat pumps, the share of British households using the technology can be specified with a value between 0 and 1 for the `share` parameter. A value of 0 indicates that no households use the technology, and a value of 1 indicates that all households use the technology. Currently technology adoption is uniform across all parts of Britain.
 
