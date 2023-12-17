@@ -27,6 +27,7 @@ ATLITE_NPROCESSES = config["atlite"].get("nprocesses", 4)
 wildcard_constraints:
     simpl="[a-zA-Z0-9]*|all",
     clusters="[0-9]+m?|all",
+    heat_flex="[0-9/.]+",
     ll="(v|c)([0-9/.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9/.]*",
 
@@ -523,12 +524,22 @@ rule build_heating_profiles:
     script:
         "scripts/build_heating_profiles.py"
 
+rule aggregate_heat_flexibility:
+    input:
+        regions = "resources/" + RDIR + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
+	flexibility_potential = "data/regional_thermal_time_constants.geojson"
+    output:
+        aggregated_flexibility_potential = "resources/" + RDIR + "heat_flexibility_elec_s{simpl}_{clusters}.csv"
+    script:
+        "scripts/aggregate_heat_flexibility.py"
+
 rule add_extra_components:
     input:
         profile_air_source_heating = 'resources/' + RDIR + 'load_air_source_heating_elec_s{simpl}_{clusters}.nc',
         profile_ground_source_heating = 'resources/' + RDIR + 'load_ground_source_heating_elec_s{simpl}_{clusters}.nc',
         profile_air_cop = "resources/" + RDIR + "cop_air_elec_s{simpl}_{clusters}.nc",
         profile_ground_cop = "resources/" + RDIR + "cop_ground_elec_s{simpl}_{clusters}.nc",
+        flexibility_potential = "resources/" + RDIR + "heat_flexibility_elec_s{simpl}_{clusters}.csv",
         network="networks/" + RDIR + "elec_s{simpl}_{clusters}.nc",
         tech_costs=COSTS,
     output:
@@ -588,6 +599,8 @@ def memory(w):
 rule solve_network:
     input:
         "networks/" + RDIR + "elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
+        flexibility_potential = "resources/" + RDIR + "heat_flexibility_elec_s{simpl}_{clusters}.csv",
+
     output:
         "results/networks/" + RDIR + "elec_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
     log:

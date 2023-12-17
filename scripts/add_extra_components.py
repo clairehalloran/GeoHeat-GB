@@ -187,11 +187,13 @@ def attach_stores(n, costs, elec_opts):
             marginal_cost=costs.at["battery inverter", "marginal_cost"],
         )
 
-def attach_heat_demand(n, heat_profiles, cop_profiles, sources):
+def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, sources):
+    logger.info("Add heat sector")
+
     buses_AC = n.buses[n.buses.carrier== 'AC']
     buses_i = buses_AC.index
     bus_sub_dict = {k: buses_AC[k].values for k in ["x", "y", "country"]}
-
+    
     for source in sources:
         with xr.open_dataset(getattr(heat_profiles, 'profile_' + source + '_source_heating')) as ds:
             if ds.indexes["bus"].empty:
@@ -199,14 +201,13 @@ def attach_heat_demand(n, heat_profiles, cop_profiles, sources):
             # create heat buses
             heat_buses_i = n.madd(
                 'Bus',
-                #!!! seem to be having a problem with the way buses are named... should I use suffix?
                 names = buses_i + f'_heat_{source}',
                 carrier = 'heat',
                 **bus_sub_dict
                 )  
             # add heating demand to buses
             heating_demand = ds['demand'].to_pandas().T
-            
+
             n.madd(
                 'Load',
                 names = buses_i,
@@ -231,7 +232,47 @@ def attach_heat_demand(n, heat_profiles, cop_profiles, sources):
                     p_nom_extendable=True,
                     capital_cost = 0 
                     )
+            # add flexibility from building envelope thermal inertia
+            n.add("Carrier", source + " building envelope")
             
+            n.madd(
+                "Bus",
+                names = buses_i + f" {source} building envelope",
+                location = buses_i,
+                carrier = source + " building envelope",
+                unit="MWh_th",
+            )
+            
+            n.madd(
+                "Link",
+                buses_i + f" {source} building envelope charger",
+                bus0 = heat_buses_i,
+                bus1 = buses_i + f" {source} building envelope",
+                carrier=source + " building envelope charger",
+                p_nom_extendable=True,
+            )
+
+            n.madd(
+                "Link",
+                buses_i + f" {source} building envelope discharger",
+                bus0 = buses_i + f" {source} building envelope",
+                bus1 = heat_buses_i,
+                carrier = source + " building envelope discharger",
+                p_nom_extendable=True,
+            )
+            
+            tes_time_constant = flexibility_potential['Thermal time constant [h]']
+
+            n.madd(
+                "Store",
+                buses_i + f" {source} building envelope",
+                bus = buses_i + f" {source} building envelope",
+                e_cyclic=True,
+                e_nom_extendable=True,
+                carrier=source + " building envelope",
+                standing_loss=1 - np.exp(-1 / tes_time_constant),
+            )
+
 def attach_hydrogen_pipelines(n, costs, elec_opts):
     ext_carriers = elec_opts["extendable_carriers"]
     as_stores = ext_carriers.get("Store", [])
@@ -276,7 +317,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_extra_components", simpl="", clusters=5)
+        snakemake = mock_snakemake("add_extra_components", simpl="", clusters=39, heat_flex = 0.05)
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -291,11 +332,12 @@ if __name__ == "__main__":
     attach_stores(n, costs, elec_config)
     
     heat_sources = snakemake.config['heating']['heat_sources']
-    #!!! add some sort of logger info about heat demand
-    attach_heat_demand(
+    flexibility_potential = pd.read_csv(snakemake.input.flexibility_potential, index_col='name')
+    add_heat(
         n,
         snakemake.input,
         snakemake.input,
+        flexibility_potential,
         heat_sources
         )
     

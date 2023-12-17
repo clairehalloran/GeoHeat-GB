@@ -75,6 +75,31 @@ Details (and errors made through this heuristic) are discussed in the paper
     The rule :mod:`solve_all_networks` runs
     for all ``scenario`` s in the configuration file
     the rule :mod:`solve_network`.
+    
+Updated to use linopy backend based on PyPSA-Eur 0.8.0, which is under an MIT License:
+    
+MIT License
+
+Copyright 2017-2023 The PyPSA-Eur Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+    
+
 """
 
 import logging
@@ -84,17 +109,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pypsa
+import xarray as xr
 from _helpers import configure_logging
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
-from pypsa.linopf import (
-    define_constraints,
-    define_variables,
-    get_var,
-    ilopf,
-    join_exprs,
-    linexpr,
-    network_lopf,
-)
+
 from vresutils.benchmark import memory_logger
 
 logger = logging.getLogger(__name__)
@@ -148,44 +166,31 @@ def prepare_network(n, solve_opts):
 
 
 def add_CCL_constraints(n, config):
-    agg_p_nom_limits = config["electricity"].get("agg_p_nom_limits")
 
-    try:
-        agg_p_nom_minmax = pd.read_csv(agg_p_nom_limits, index_col=list(range(2)))
-    except IOError:
-        logger.exception(
-            "Need to specify the path to a .csv file containing "
-            "aggregate capacity limits per country in "
-            "config['electricity']['agg_p_nom_limit']."
-        )
-    logger.info(
-        "Adding per carrier generation capacity constraints for " "individual countries"
+    agg_p_nom_minmax = pd.read_csv(
+        config["electricity"]["agg_p_nom_limits"], index_col=[0, 1]
     )
+    logger.info("Adding generation capacity constraints per carrier and country")
+    p_nom = n.model["Generator-p_nom"]
 
-    gen_country = n.generators.bus.map(n.buses.country)
-    # cc means country and carrier
-    p_nom_per_cc = (
-        pd.DataFrame(
-            {
-                "p_nom": linexpr((1, get_var(n, "Generator", "p_nom"))),
-                "country": gen_country,
-                "carrier": n.generators.carrier,
-            }
+    gens = n.generators.query("p_nom_extendable").rename_axis(index="Generator-ext")
+    grouper = pd.concat([gens.bus.map(n.buses.country), gens.carrier])
+    lhs = p_nom.groupby(grouper).sum().rename(bus="country")
+
+    minimum = xr.DataArray(agg_p_nom_minmax["min"].dropna()).rename(dim_0="group")
+    index = minimum.indexes["group"].intersection(lhs.indexes["group"])
+    if not index.empty:
+        n.model.add_constraints(
+            lhs.sel(group=index) >= minimum.loc[index], name="agg_p_nom_min"
         )
-        .dropna(subset=["p_nom"])
-        .groupby(["country", "carrier"])
-        .p_nom.apply(join_exprs)
-    )
-    minimum = agg_p_nom_minmax["min"].dropna()
-    if not minimum.empty:
-        minconstraint = define_constraints(
-            n, p_nom_per_cc[minimum.index], ">=", minimum, "agg_p_nom", "min"
+
+    maximum = xr.DataArray(agg_p_nom_minmax["max"].dropna()).rename(dim_0="group")
+    index = maximum.indexes["group"].intersection(lhs.indexes["group"])
+    if not index.empty:
+        n.model.add_constraints(
+            lhs.sel(group=index) <= maximum.loc[index], name="agg_p_nom_max"
         )
-    maximum = agg_p_nom_minmax["max"].dropna()
-    if not maximum.empty:
-        maxconstraint = define_constraints(
-            n, p_nom_per_cc[maximum.index], "<=", maximum, "agg_p_nom", "max"
-        )
+
 
 
 def add_EQ_constraints(n, o, scaling=1e-1):
@@ -209,145 +214,236 @@ def add_EQ_constraints(n, o, scaling=1e-1):
     )
     inflow = inflow.reindex(load.index).fillna(0.0)
     rhs = scaling * (level * load - inflow)
+    p = n.model["Generator-p"]
     lhs_gen = (
-        linexpr(
-            (n.snapshot_weightings.generators * scaling, get_var(n, "Generator", "p").T)
-        )
-        .T.groupby(ggrouper, axis=1)
-        .apply(join_exprs)
+        (p * (n.snapshot_weightings.generators * scaling))
+        .groupby(ggrouper.to_xarray())
+        .sum()
+        .sum("snapshot")
     )
-    lhs_spill = (
-        linexpr(
-            (
-                -n.snapshot_weightings.stores * scaling,
-                get_var(n, "StorageUnit", "spill").T,
-            )
+    # TODO: double check that this is really needed, why do have to subtract the spillage
+    if not n.storage_units_t.inflow.empty:
+        spillage = n.model["StorageUnit-spill"]
+        lhs_spill = (
+            (spillage * (-n.snapshot_weightings.stores * scaling))
+            .groupby(sgrouper.to_xarray())
+            .sum()
+            .sum("snapshot")
         )
-        .T.groupby(sgrouper, axis=1)
-        .apply(join_exprs)
-    )
-    lhs_spill = lhs_spill.reindex(lhs_gen.index).fillna("")
-    lhs = lhs_gen + lhs_spill
-    define_constraints(n, lhs, ">=", rhs, "equity", "min")
+        lhs = lhs_gen + lhs_spill
+    else:
+        lhs = lhs_gen
+    n.model.add_constraints(lhs >= rhs, name="equity_min")
 
 
 def add_BAU_constraints(n, config):
     mincaps = pd.Series(config["electricity"]["BAU_mincapacities"])
-    lhs = (
-        linexpr((1, get_var(n, "Generator", "p_nom")))
-        .groupby(n.generators.carrier)
-        .apply(join_exprs)
-    )
-    define_constraints(n, lhs, ">=", mincaps[lhs.index], "Carrier", "bau_mincaps")
-
+    p_nom = n.model["Generator-p_nom"]
+    ext_i = n.generators.query("p_nom_extendable")
+    ext_carrier_i = xr.DataArray(ext_i.carrier.rename_axis("Generator-ext"))
+    lhs = p_nom.groupby(ext_carrier_i).sum()
+    index = mincaps.index.intersection(lhs.indexes["carrier"])
+    rhs = mincaps[index].rename_axis("carrier")
+    n.model.add_constraints(lhs >= rhs, name="bau_mincaps")
 
 def add_SAFE_constraints(n, config):
-    peakdemand = (
-        1.0 + config["electricity"]["SAFE_reservemargin"]
-    ) * n.loads_t.p_set.sum(axis=1).max()
-    conv_techs = config["plotting"]["conv_techs"]
+    peakdemand = n.loads_t.p_set.sum(axis=1).max()
+    margin = 1.0 + config["electricity"]["SAFE_reservemargin"]
+    reserve_margin = peakdemand * margin
+    conventional_carriers = config["electricity"]["conventional_carriers"]
+    ext_gens_i = n.generators.query(
+        "carrier in @conventional_carriers & p_nom_extendable"
+    ).index
+    p_nom = n.model["Generator-p_nom"].loc[ext_gens_i]
+    lhs = p_nom.sum()
     exist_conv_caps = n.generators.query(
-        "~p_nom_extendable & carrier in @conv_techs"
+        "~p_nom_extendable & carrier in @conventional_carriers"
     ).p_nom.sum()
-    ext_gens_i = n.generators.query("carrier in @conv_techs & p_nom_extendable").index
-    lhs = linexpr((1, get_var(n, "Generator", "p_nom")[ext_gens_i])).sum()
-    rhs = peakdemand - exist_conv_caps
-    define_constraints(n, lhs, ">=", rhs, "Safe", "mintotalcap")
-
-
-def add_operational_reserve_margin_constraint(n, config):
-    reserve_config = config["electricity"]["operational_reserve"]
-    EPSILON_LOAD = reserve_config["epsilon_load"]
-    EPSILON_VRES = reserve_config["epsilon_vres"]
-    CONTINGENCY = reserve_config["contingency"]
-
-    # Reserve Variables
-    reserve = get_var(n, "Generator", "r")
-    lhs = linexpr((1, reserve)).sum(1)
-
-    # Share of extendable renewable capacities
-    ext_i = n.generators.query("p_nom_extendable").index
-    vres_i = n.generators_t.p_max_pu.columns
-    if not ext_i.empty and not vres_i.empty:
-        capacity_factor = n.generators_t.p_max_pu[vres_i.intersection(ext_i)]
-        renewable_capacity_variables = get_var(n, "Generator", "p_nom")[
-            vres_i.intersection(ext_i)
-        ]
-        lhs += linexpr(
-            (-EPSILON_VRES * capacity_factor, renewable_capacity_variables)
-        ).sum(1)
-
-    # Total demand at t
-    demand = n.loads_t.p_set.sum(1)
-
-    # VRES potential of non extendable generators
-    capacity_factor = n.generators_t.p_max_pu[vres_i.difference(ext_i)]
-    renewable_capacity = n.generators.p_nom[vres_i.difference(ext_i)]
-    potential = (capacity_factor * renewable_capacity).sum(1)
-
-    # Right-hand-side
-    rhs = EPSILON_LOAD * demand + EPSILON_VRES * potential + CONTINGENCY
-
-    define_constraints(n, lhs, ">=", rhs, "Reserve margin")
-
-
-def update_capacity_constraint(n):
-    gen_i = n.generators.index
-    ext_i = n.generators.query("p_nom_extendable").index
-    fix_i = n.generators.query("not p_nom_extendable").index
-
-    dispatch = get_var(n, "Generator", "p")
-    reserve = get_var(n, "Generator", "r")
-
-    capacity_fixed = n.generators.p_nom[fix_i]
-
-    p_max_pu = get_as_dense(n, "Generator", "p_max_pu")
-
-    lhs = linexpr((1, dispatch), (1, reserve))
-
-    if not ext_i.empty:
-        capacity_variable = get_var(n, "Generator", "p_nom")
-        lhs += linexpr((-p_max_pu[ext_i], capacity_variable)).reindex(
-            columns=gen_i, fill_value=""
-        )
-
-    rhs = (p_max_pu[fix_i] * capacity_fixed).reindex(columns=gen_i, fill_value=0)
-
-    define_constraints(n, lhs, "<=", rhs, "Generators", "updated_capacity_constraint")
-
+    rhs = reserve_margin - exist_conv_caps
+    n.model.add_constraints(lhs >= rhs, name="safe_mintotalcap")
 
 def add_operational_reserve_margin(n, sns, config):
     """
     Build reserve margin constraints based on the formulation given in
     https://genxproject.github.io/GenX/dev/core/#Reserves.
     """
+    reserve_config = config["electricity"]["operational_reserve"]
+    EPSILON_LOAD = reserve_config["epsilon_load"]
+    EPSILON_VRES = reserve_config["epsilon_vres"]
+    CONTINGENCY = reserve_config["contingency"]
 
-    define_variables(n, 0, np.inf, "Generator", "r", axes=[sns, n.generators.index])
-
-    add_operational_reserve_margin_constraint(n, config)
-
-    update_capacity_constraint(n)
-
-
-def add_battery_constraints(n):
-    nodes = n.buses.index[n.buses.carrier == "battery"]
-    if nodes.empty or ("Link", "p_nom") not in n.variables.index:
-        return
-    link_p_nom = get_var(n, "Link", "p_nom")
-    lhs = linexpr(
-        (1, link_p_nom[nodes + " charger"]),
-        (
-            -n.links.loc[nodes + " discharger", "efficiency"].values,
-            link_p_nom[nodes + " discharger"].values,
-        ),
+    # Reserve Variables
+    n.model.add_variables(
+        0, np.inf, coords=[sns, n.generators.index], name="Generator-r"
     )
-    define_constraints(n, lhs, "=", 0, "Link", "charger_ratio")
+    reserve = n.model["Generator-r"]
+    summed_reserve = reserve.sum("Generator")
 
+    # Share of extendable renewable capacities
+    ext_i = n.generators.query("p_nom_extendable").index
+    vres_i = n.generators_t.p_max_pu.columns
+    if not ext_i.empty and not vres_i.empty:
+        capacity_factor = n.generators_t.p_max_pu[vres_i.intersection(ext_i)]
+        p_nom_vres = (
+            n.model["Generator-p_nom"]
+            .loc[vres_i.intersection(ext_i)]
+            .rename({"Generator-ext": "Generator"})
+        )
+        lhs = summed_reserve + (p_nom_vres * (-EPSILON_VRES * capacity_factor)).sum(
+            "Generator"
+        )
+
+    # Total demand per t
+    demand = get_as_dense(n, "Load", "p_set").sum(axis=1)
+
+    # VRES potential of non extendable generators
+    capacity_factor = n.generators_t.p_max_pu[vres_i.difference(ext_i)]
+    renewable_capacity = n.generators.p_nom[vres_i.difference(ext_i)]
+    potential = (capacity_factor * renewable_capacity).sum(axis=1)
+
+    # Right-hand-side
+    rhs = EPSILON_LOAD * demand + EPSILON_VRES * potential + CONTINGENCY
+
+    n.model.add_constraints(lhs >= rhs, name="reserve_margin")
+
+    # additional constraint that capacity is not exceeded
+    gen_i = n.generators.index
+    ext_i = n.generators.query("p_nom_extendable").index
+    fix_i = n.generators.query("not p_nom_extendable").index
+
+    dispatch = n.model["Generator-p"]
+    reserve = n.model["Generator-r"]
+
+    capacity_variable = n.model["Generator-p_nom"].rename(
+        {"Generator-ext": "Generator"}
+    )
+    capacity_fixed = n.generators.p_nom[fix_i]
+
+    p_max_pu = get_as_dense(n, "Generator", "p_max_pu")
+
+    lhs = dispatch + reserve - capacity_variable * p_max_pu[ext_i]
+
+    rhs = (p_max_pu[fix_i] * capacity_fixed).reindex(columns=gen_i, fill_value=0)
+
+    n.model.add_constraints(lhs <= rhs, name="Generator-p-reserve-upper")
+    
+def add_battery_constraints(n):
+    if not n.links.p_nom_extendable.any():
+        return
+
+    discharger_bool = n.links.index.str.contains("battery discharger")
+    charger_bool = n.links.index.str.contains("battery charger")
+
+    dischargers_ext = n.links[discharger_bool].query("p_nom_extendable").index
+    chargers_ext = n.links[charger_bool].query("p_nom_extendable").index
+
+    eff = n.links.efficiency[dischargers_ext].values
+    lhs = (
+        n.model["Link-p_nom"].loc[chargers_ext]
+        - n.model["Link-p_nom"].loc[dischargers_ext] * eff
+    )
+
+    n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
+
+def add_flexibility_constraints(n, config, o):
+    # add constraints on flexibility participation
+    
+    float_regex = "[0-9]*\.?[0-9]+"
+    participation = float(re.findall(float_regex, o)[0])
+    
+    buses_i = n.buses.query("carrier == 'AC'").index
+    sources = config['heating']['heat_sources']
+    temperature_window = config['heating']['temperature_window']
+    flexibility_potential = pd.read_csv(snakemake.input.flexibility_potential, index_col='name')
+
+    for source in sources:
+        source_share = config['heating'][f'{source}']['share']
+        households = pd.Series(flexibility_potential['Households'].values, index = [buses_i + f" {source} building envelope"])
+        # decision variable-- defined for each source
+        flexible_households = n.model.add_variables(lower = 0.0, 
+                                                  upper = households*snakemake.config['heating'][f'{source}']['share'], 
+                                                  coords = [buses_i + f" {source} building envelope"],
+                                                  name = f'Bus-{source}_flexible_households')
+        
+        # add a global-style constraint limiting the total number of air- and ground-source households participating in flexibility
+        #!!! only feasible without this constraint
+        n.model.add_constraints(flexible_households.sum()
+                              == participation * sum(households) * source_share,
+                              name = f'Total-{source}-flexible-households'
+                              )
+        # add dropped heat load with p_set = 0
+        for bus in (buses_i.values + f'_{source}_heat'):
+            if bus not in n.loads_t['p_set'].columns:
+                n.loads_t['p_set'][bus] = 0.
+        
+        # limit p_nom as the maximum of the flexible households times the peak heat demand in that area
+        peak_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat'].max()
+        # update index of peak heat demand to match households dischargers
+        peak_heat_demand.index = ([buses_i + f" {source} building envelope"])
+        
+        flexibility_discharge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope discharger"]
+        # replace 
+        flexible_households_share = flexible_households / (households).replace(0,np.inf)
+        
+        links = buses_i.values + f" {source} building envelope discharger"
+        buses = buses_i + f" {source} building envelope"
+        power_mask = xr.DataArray(
+            np.eye(peak_heat_demand.size,flexible_households_share.size,dtype=bool),
+            dims = ['Link-ext','Bus'],
+            coords={
+                'Link-ext' : links,
+                'Bus' : buses
+                }
+            )
+        
+        #!!! issue: off-diagonal constraints on power limit because of different coords
+        n.model.add_constraints(flexibility_discharge_power
+                              == flexible_households_share * peak_heat_demand,
+                              name = f'{source}-flexibility-power-limit',
+                              # mask to only apply on diagonal
+                               mask = power_mask
+                              )
+        
+        # update index of peak heat demand to match load
+        peak_heat_demand.index = (buses_i.values + f'_{source}_heat')
+        
+        # set p_nom_max as normalized heat demand for each time step 
+        normalized_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat']/peak_heat_demand
+        # reindex to links instead of buses
+        normalized_heat_demand.columns = (buses_i.values + f" {source} building envelope discharger")
+        normalized_heat_demand.fillna(0,inplace=True)
+        
+        n.links_t['p_max_pu'] = normalized_heat_demand
+        
+        # limit e_nom based on mean thermal capacity in each region, number of flexible households, and temperature window
+        thermal_capacity = flexibility_potential['Thermal capacity [kWh/C]']/1000 # convert from kWh to MWh
+        thermal_capacity.index = (buses_i.values + f" {source} building envelope")
+        
+        flexibility_energy_capacity = n.model.variables['Store-e_nom'].loc[buses_i.values + f" {source} building envelope"]
+        
+        
+        stores = buses_i.values + f" {source} building envelope"
+        energy_mask  = xr.DataArray(
+            np.eye(flexibility_energy_capacity.size,flexible_households_share.size,dtype=bool),
+            dims = ['Store-ext','Bus'],
+            coords={
+                'Store-ext' : stores,
+                'Bus' : buses
+                }
+            )
+        
+        
+        n.model.add_constraints(flexibility_energy_capacity
+                              == flexible_households * thermal_capacity * temperature_window,
+                              name = f'{source}-flexibility-energy-limit',
+                              mask = energy_mask
+                              )
+        
 
 def extra_functionality(n, snapshots):
     """
     Collects supplementary constraints which will be passed to
-    ``pypsa.linopf.network_lopf``.
+    ``pypsa.optimization.optimize``.
 
     If you want to enforce additional custom constraints, this is a good
     location to add them. The arguments ``opts`` and
@@ -367,8 +463,12 @@ def extra_functionality(n, snapshots):
     for o in opts:
         if "EQ" in o:
             add_EQ_constraints(n, o)
+        if 'flex' in o:
+            add_flexibility_constraints(n, config, o)
+    # if no flexibility opt wildcard given, assume 0% flexibility
+    if sum('flex' in o for o in opts) == 0:
+       add_flexibility_constraints(n, config, 'flex0.0')
     add_battery_constraints(n)
-
 
 def solve_network(n, config, opts="", **kwargs):
     solver_options = config["solving"]["solver"].copy()
@@ -388,12 +488,11 @@ def solve_network(n, config, opts="", **kwargs):
         logger.info("No expandable lines found. Skipping iterative solving.")
 
     if skip_iterations:
-        network_lopf(
+        n.optimize(
             n, solver_name=solver_name, solver_options=solver_options, **kwargs
         )
     else:
-        ilopf(
-            n,
+        n.optimize.optimize_transmission_expansion_iteratively(
             solver_name=solver_name,
             solver_options=solver_options,
             track_iterations=track_iterations,
@@ -409,7 +508,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_network", simpl="", clusters="5", ll="copt", opts="Co2L-BAU-CCL-24H"
+            "solve_network", simpl="", clusters="39", ll="v1.15", opts="Co2L0.1-EQ0.95c-flex0.01"
         )
     configure_logging(snakemake)
 
@@ -431,6 +530,7 @@ if __name__ == "__main__":
             solver_dir=tmpdir,
             solver_logfile=snakemake.log.solver,
         )
+            
         n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
         n.export_to_netcdf(snakemake.output[0])
 
