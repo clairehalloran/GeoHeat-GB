@@ -250,6 +250,7 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, sources):
                 bus1 = buses_i + f" {source} building envelope",
                 carrier=source + " building envelope charger",
                 p_nom_extendable=True,
+                efficiency = 0.99
             )
 
             n.madd(
@@ -262,7 +263,8 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, sources):
             )
             
             tes_time_constant = flexibility_potential['Thermal time constant [h]']
-
+            tes_time_constant.index = buses_i + f" {source} building envelope"
+            
             n.madd(
                 "Store",
                 buses_i + f" {source} building envelope",
