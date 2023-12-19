@@ -353,6 +353,7 @@ def add_flexibility_constraints(n, config, o):
     
     buses_i = n.buses.query("carrier == 'AC'").index
     sources = config['heating']['heat_sources']
+    heat_pump_capacity = config['heating']['heat_pump_capacity']/1e3 # kW to MW
     temperature_window = config['heating']['temperature_window']
     flexibility_potential = pd.read_csv(snakemake.input.flexibility_potential, index_col='name')
 
@@ -366,7 +367,6 @@ def add_flexibility_constraints(n, config, o):
                                                   name = f'Bus-{source}_flexible_households')
         
         # add a global-style constraint limiting the total number of air- and ground-source households participating in flexibility
-        #!!! only feasible without this constraint
         n.model.add_constraints(flexible_households.sum()
                               == participation * sum(households) * source_share,
                               name = f'Total-{source}-flexible-households'
@@ -387,7 +387,7 @@ def add_flexibility_constraints(n, config, o):
         
         links = buses_i.values + f" {source} building envelope discharger"
         buses = buses_i + f" {source} building envelope"
-        power_mask = xr.DataArray(
+        discharge_power_mask = xr.DataArray(
             np.eye(peak_heat_demand.size,flexible_households_share.size,dtype=bool),
             dims = ['Link-ext','Bus'],
             coords={
@@ -396,12 +396,11 @@ def add_flexibility_constraints(n, config, o):
                 }
             )
         
-        #!!! issue: off-diagonal constraints on power limit because of different coords
         n.model.add_constraints(flexibility_discharge_power
                               == flexible_households_share * peak_heat_demand,
-                              name = f'{source}-flexibility-power-limit',
+                              name = f'{source}-flexibility-discharge-limit',
                               # mask to only apply on diagonal
-                               mask = power_mask
+                               mask = discharge_power_mask
                               )
         
         # update index of peak heat demand to match load
@@ -414,6 +413,29 @@ def add_flexibility_constraints(n, config, o):
         normalized_heat_demand.fillna(0,inplace=True)
         
         n.links_t['p_max_pu'] = normalized_heat_demand
+        
+        
+        # limit flexibility charging based on mean thermal capacity of heat pumps in Watson et al.
+        
+        flexibility_charge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope charger"]
+
+        links = buses_i.values + f" {source} building envelope charger"
+        buses = buses_i + f" {source} building envelope"
+        charge_power_mask = xr.DataArray(
+            np.eye(peak_heat_demand.size,flexible_households_share.size,dtype=bool),
+            dims = ['Link-ext','Bus'],
+            coords={
+                'Link-ext' : links,
+                'Bus' : buses
+                }
+            )
+
+        n.model.add_constraints(flexibility_charge_power
+                              == flexible_households * heat_pump_capacity,
+                              name = f'{source}-flexibility-charge-limit',
+                              # mask to only apply on diagonal
+                               mask = charge_power_mask
+                              )
         
         # limit e_nom based on mean thermal capacity in each region, number of flexible households, and temperature window
         thermal_capacity = flexibility_potential['Thermal capacity [kWh/C]']/1000 # convert from kWh to MWh
