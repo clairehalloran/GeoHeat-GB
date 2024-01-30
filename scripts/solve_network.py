@@ -226,7 +226,7 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         spillage = n.model["StorageUnit-spill"]
         lhs_spill = (
             (spillage * (-n.snapshot_weightings.stores * scaling))
-            .groupby(sgrouper.to_xarray())
+            .groupby(sgrouper.to_xarray())  
             .sum()
             .sum("snapshot")
         )
@@ -362,7 +362,7 @@ def add_flexibility_constraints(n, config, o):
         households = pd.Series(flexibility_potential['Households'].values, index = [buses_i + f" {source} building envelope"])
         # decision variable-- defined for each source
         flexible_households = n.model.add_variables(lower = 0.0, 
-                                                  upper = households*snakemake.config['heating'][f'{source}']['share'], 
+                                                  upper = households*source_share, 
                                                   coords = [buses_i + f" {source} building envelope"],
                                                   name = f'Bus-{source}_flexible_households')
         
@@ -382,8 +382,7 @@ def add_flexibility_constraints(n, config, o):
         peak_heat_demand.index = ([buses_i + f" {source} building envelope"])
         
         flexibility_discharge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope discharger"]
-        # replace 
-        flexible_households_share = flexible_households / (households).replace(0,np.inf)
+        flexible_households_share = flexible_households / (households*source_share).replace(0,np.inf)
         
         links = buses_i.values + f" {source} building envelope discharger"
         buses = buses_i + f" {source} building envelope"
@@ -511,7 +510,7 @@ def solve_network(n, config, opts="", **kwargs):
 
     if skip_iterations:
         n.optimize(
-            n, solver_name=solver_name, solver_options=solver_options, **kwargs
+            solver_name=solver_name, solver_options=solver_options, **kwargs
         )
     else:
         n.optimize.optimize_transmission_expansion_iteratively(
@@ -530,7 +529,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_network", simpl="", clusters="39", ll="v1.15", opts="Co2L0.1-EQ0.95c-flex0.01"
+            "solve_network", simpl="", clusters="39", ll="v1.0", opts="Co2L1.0-EQ0.95c-flex0.05"
         )
     configure_logging(snakemake)
 
