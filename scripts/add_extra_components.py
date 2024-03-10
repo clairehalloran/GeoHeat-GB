@@ -187,14 +187,18 @@ def attach_stores(n, costs, elec_opts):
             marginal_cost=costs.at["battery inverter", "marginal_cost"],
         )
 
-def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, sources):
+def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, heating_config):
     logger.info("Add heat sector")
+    
+    heat_sources = heating_config['heat_sources']
+    heat_pump_capacity = heating_config['heat_pump_capacity']/1e3 # kW to MW
 
     buses_AC = n.buses[n.buses.carrier== 'AC']
     buses_i = buses_AC.index
     bus_sub_dict = {k: buses_AC[k].values for k in ["x", "y", "country"]}
     
-    for source in sources:
+    for source in heat_sources:
+        source_share = heating_config[f'{source}']['share']
         with xr.open_dataset(getattr(heat_profiles, 'profile_' + source + '_source_heating')) as ds:
             if ds.indexes["bus"].empty:
                 continue
@@ -207,7 +211,10 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, sources):
                 )  
             # add heating demand to buses
             heating_demand = ds['demand'].to_pandas().T
-
+            # remove small heating demands outside GB
+            for column in heating_demand.columns:
+                if 'GB1' not in column:
+                    heating_demand[column] = 0.
             n.madd(
                 'Load',
                 names = buses_i,
@@ -220,16 +227,20 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, sources):
 
                 cop = cop['cop'].to_pandas()
             
+                households = flexibility_potential['Households']
                 # add heat pump links to heat buses
                 n.madd(
                     "Link",
                     names = buses_i,
                     suffix =f' {source} heat pump',
-                    bus0 = buses_i,
-                    bus1 = heat_buses_i,
+                    # bus 0 and 1 flipped to set p_nom in terms of thermal capacity
+                    bus0 = heat_buses_i,
+                    bus1 = buses_i,
+                    p_max_pu = 0,
+                    p_min_pu=-1,
                     carrier = f'{source} heat pump',
-                    efficiency=cop,
-                    p_nom_extendable=True,
+                    efficiency=1/cop,
+                    p_nom = source_share * households * heat_pump_capacity,
                     capital_cost = 0 
                     )
             # add flexibility from building envelope thermal inertia
@@ -249,9 +260,8 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, sources):
                 bus0 = heat_buses_i,
                 bus1 = buses_i + f" {source} building envelope",
                 carrier=source + " building envelope charger",
-                p_nom_extendable=True,
-                efficiency = 0.99
-            )
+                p_nom_extendable=True
+                )
 
             n.madd(
                 "Link",
@@ -319,7 +329,7 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         from _helpers import mock_snakemake
 
-        snakemake = mock_snakemake("add_extra_components", simpl="", clusters=39, heat_flex = 0.05)
+        snakemake = mock_snakemake("add_extra_components", simpl="", clusters=39)
     configure_logging(snakemake)
 
     n = pypsa.Network(snakemake.input.network)
@@ -333,19 +343,21 @@ if __name__ == "__main__":
     attach_storageunits(n, costs, elec_config)
     attach_stores(n, costs, elec_config)
     
-    heat_sources = snakemake.config['heating']['heat_sources']
+    heating_config = snakemake.config['heating']
+
     flexibility_potential = pd.read_csv(snakemake.input.flexibility_potential, index_col='name')
     add_heat(
         n,
         snakemake.input,
         snakemake.input,
         flexibility_potential,
-        heat_sources
+        heating_config
         )
     
     attach_hydrogen_pipelines(n, costs, elec_config)
     
     add_nice_carrier_names(n, snakemake.config)
-
+    loads = n.loads_t.p_set
+    links = n.links.p_nom
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
     n.export_to_netcdf(snakemake.output[0])

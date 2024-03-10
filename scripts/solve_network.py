@@ -112,7 +112,6 @@ import pypsa
 import xarray as xr
 from _helpers import configure_logging
 from pypsa.descriptors import get_switchable_as_dense as get_as_dense
-
 from vresutils.benchmark import memory_logger
 
 logger = logging.getLogger(__name__)
@@ -345,7 +344,7 @@ def add_battery_constraints(n):
 
     n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
 
-def add_flexibility_constraints(n, config, o):
+def add_flexibility_constraints(n, config, o, flexibility_potential):
     # add constraints on flexibility participation
     
     float_regex = "[0-9]*\.?[0-9]+"
@@ -355,22 +354,24 @@ def add_flexibility_constraints(n, config, o):
     sources = config['heating']['heat_sources']
     heat_pump_capacity = config['heating']['heat_pump_capacity']/1e3 # kW to MW
     temperature_window = config['heating']['temperature_window']
-    flexibility_potential = pd.read_csv(snakemake.input.flexibility_potential, index_col='name')
+    # flexibility_potential = pd.read_csv(snakemake.input.flexibility_potential, index_col='name')
 
     for source in sources:
         source_share = config['heating'][f'{source}']['share']
-        households = pd.Series(flexibility_potential['Households'].values, index = [buses_i + f" {source} building envelope"])
+        households = pd.Series(flexibility_potential['Households'].values, index = buses_i + f" {source} building envelope")
         # decision variable-- defined for each source
-        flexible_households = n.model.add_variables(lower = 0.0, 
-                                                  upper = households*source_share, 
-                                                  coords = [buses_i + f" {source} building envelope"],
-                                                  name = f'Bus-{source}_flexible_households')
+        flexible_households = n.model.add_variables(lower = np.zeros(households.index.size),
+                                                    upper = households*source_share, 
+                                                    coords = [buses_i + f" {source} building envelope"],
+                                                    name = f'Bus-{source}_flexible_households')
         
         # add a global-style constraint limiting the total number of air- and ground-source households participating in flexibility
-        n.model.add_constraints(flexible_households.sum()
-                              == participation * sum(households) * source_share,
-                              name = f'Total-{source}-flexible-households'
-                              )
+        n.model.add_constraints(
+             flexible_households.sum(dims='Bus')
+             == participation * households.sum() * source_share,
+             name = f'Total-{source}-flexible-households'
+             )
+        
         # add dropped heat load with p_set = 0
         for bus in (buses_i.values + f'_{source}_heat'):
             if bus not in n.loads_t['p_set'].columns:
@@ -379,7 +380,7 @@ def add_flexibility_constraints(n, config, o):
         # limit p_nom as the maximum of the flexible households times the peak heat demand in that area
         peak_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat'].max()
         # update index of peak heat demand to match households dischargers
-        peak_heat_demand.index = ([buses_i + f" {source} building envelope"])
+        peak_heat_demand.index = (buses_i + f" {source} building envelope")
         
         flexibility_discharge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope discharger"]
         flexible_households_share = flexible_households / (households*source_share).replace(0,np.inf)
@@ -399,13 +400,14 @@ def add_flexibility_constraints(n, config, o):
                               == flexible_households_share * peak_heat_demand,
                               name = f'{source}-flexibility-discharge-limit',
                               # mask to only apply on diagonal
-                               mask = discharge_power_mask
+                                mask = discharge_power_mask
                               )
         
         # update index of peak heat demand to match load
         peak_heat_demand.index = (buses_i.values + f'_{source}_heat')
         
         # set p_nom_max as normalized heat demand for each time step 
+        # !!! update to only allow space heating demand to be met by flex?
         normalized_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat']/peak_heat_demand
         # reindex to links instead of buses
         normalized_heat_demand.columns = (buses_i.values + f" {source} building envelope discharger")
@@ -428,12 +430,11 @@ def add_flexibility_constraints(n, config, o):
                 'Bus' : buses
                 }
             )
-
         n.model.add_constraints(flexibility_charge_power
                               == flexible_households * heat_pump_capacity,
                               name = f'{source}-flexibility-charge-limit',
                               # mask to only apply on diagonal
-                               mask = charge_power_mask
+                                mask = charge_power_mask
                               )
         
         # limit e_nom based on mean thermal capacity in each region, number of flexible households, and temperature window
@@ -453,7 +454,6 @@ def add_flexibility_constraints(n, config, o):
                 }
             )
         
-        
         n.model.add_constraints(flexibility_energy_capacity
                               == flexible_households * thermal_capacity * temperature_window,
                               name = f'{source}-flexibility-energy-limit',
@@ -461,7 +461,7 @@ def add_flexibility_constraints(n, config, o):
                               )
         
 
-def extra_functionality(n, snapshots):
+def extra_functionality(n, snapshots, **kwargs):
     """
     Collects supplementary constraints which will be passed to
     ``pypsa.optimization.optimize``.
@@ -472,37 +472,46 @@ def extra_functionality(n, snapshots):
     """
     opts = n.opts
     config = n.config
+    flexibility_potential = n.flexibility_potential
     if "BAU" in opts and n.generators.p_nom_extendable.any():
+        logger.info('Adding BAU constraints.')
         add_BAU_constraints(n, config)
     if "SAFE" in opts and n.generators.p_nom_extendable.any():
+        logger.info('Adding SAFE constraints.')
         add_SAFE_constraints(n, config)
     if "CCL" in opts and n.generators.p_nom_extendable.any():
+        logger.info('Adding CCL constraints.')
         add_CCL_constraints(n, config)
     reserve = config["electricity"].get("operational_reserve", {})
     if reserve.get("activate"):
+        logger.info('Adding operational reserve margin.')
         add_operational_reserve_margin(n, snapshots, config)
     for o in opts:
         if "EQ" in o:
+            logger.info('Adding EQ constraints.')
             add_EQ_constraints(n, o)
         if 'flex' in o:
-            add_flexibility_constraints(n, config, o)
+            logger.info('Adding flexibility constraints.')
+            add_flexibility_constraints(n, config, o, flexibility_potential)
     # if no flexibility opt wildcard given, assume 0% flexibility
     if sum('flex' in o for o in opts) == 0:
        add_flexibility_constraints(n, config, 'flex0.0')
+    logger.info('Adding battery constraints.')
     add_battery_constraints(n)
 
-def solve_network(n, config, opts="", **kwargs):
+def solve_network(n, config, opts="", flexibility_potential=None, **kwargs):
     solver_options = config["solving"]["solver"].copy()
     solver_name = solver_options.pop("name")
     cf_solving = config["solving"]["options"]
     track_iterations = cf_solving.get("track_iterations", False)
     min_iterations = cf_solving.get("min_iterations", 4)
     max_iterations = cf_solving.get("max_iterations", 6)
-
+        
     # add to network for extra_functionality
     n.config = config
     n.opts = opts
-
+    # if flexibility_potential not None:
+    n.flexibility_potential = flexibility_potential
     skip_iterations = cf_solving.get("skip_iterations", False)
     if not n.lines.s_nom_extendable.any():
         skip_iterations = True
@@ -529,7 +538,7 @@ if __name__ == "__main__":
         from _helpers import mock_snakemake
 
         snakemake = mock_snakemake(
-            "solve_network", simpl="", clusters="39", ll="v1.0", opts="Co2L1.0-EQ0.95c-flex0.05"
+            "solve_network", simpl="", clusters="39", ll="v1.15", opts="Co2L0.1-EQ0.95c-flex0.15"
         )
     configure_logging(snakemake)
 
@@ -538,6 +547,7 @@ if __name__ == "__main__":
         Path(tmpdir).mkdir(parents=True, exist_ok=True)
     opts = snakemake.wildcards.opts.split("-")
     solve_opts = snakemake.config["solving"]["options"]
+    flexibility_potential = pd.read_csv(snakemake.input.flexibility_potential, index_col='name')
 
     fn = getattr(snakemake.log, "memory", None)
     with memory_logger(filename=fn, interval=30.0) as mem:
@@ -547,6 +557,7 @@ if __name__ == "__main__":
             n,
             snakemake.config,
             opts,
+            flexibility_potential,
             extra_functionality=extra_functionality,
             solver_dir=tmpdir,
             solver_logfile=snakemake.log.solver,

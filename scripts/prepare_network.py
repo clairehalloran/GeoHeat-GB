@@ -296,7 +296,7 @@ if __name__ == "__main__":
                 add_gaslimit(n, snakemake.config["electricity"].get("gaslimit"), Nyears)
                 logger.info("Setting gas usage limit according to config value.")
             break
-
+        
     for o in opts:
         oo = o.split("+")
         suptechs = map(lambda c: c.split("-", 2)[0], n.carriers.index)
