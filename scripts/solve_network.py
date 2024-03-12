@@ -373,12 +373,12 @@ def add_flexibility_constraints(n, config, o, flexibility_potential):
              )
         
         # add dropped heat load with p_set = 0
-        for bus in (buses_i.values + f'_{source}_heat'):
+        for bus in (buses_i.values + f'_{source}_space_heat'):
             if bus not in n.loads_t['p_set'].columns:
                 n.loads_t['p_set'][bus] = 0.
         
-        # limit p_nom as the maximum of the flexible households times the peak heat demand in that area
-        peak_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat'].max()
+        # limit p_nom as the maximum of the flexible households times the peak space heat demand in that area
+        peak_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_space_heat'].max()
         # update index of peak heat demand to match households dischargers
         peak_heat_demand.index = (buses_i + f" {source} building envelope")
         
@@ -404,17 +404,16 @@ def add_flexibility_constraints(n, config, o, flexibility_potential):
                               )
         
         # update index of peak heat demand to match load
-        peak_heat_demand.index = (buses_i.values + f'_{source}_heat')
+        peak_heat_demand.index = (buses_i.values + f'_{source}_space_heat')
         
         # set p_nom_max as normalized heat demand for each time step 
         # !!! update to only allow space heating demand to be met by flex?
-        normalized_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat']/peak_heat_demand
+        normalized_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_space_heat']/peak_heat_demand
         # reindex to links instead of buses
         normalized_heat_demand.columns = (buses_i.values + f" {source} building envelope discharger")
         normalized_heat_demand.fillna(0,inplace=True)
         
         n.links_t['p_max_pu'] = normalized_heat_demand
-        
         
         # limit flexibility charging based on mean thermal capacity of heat pumps in Watson et al.
         
@@ -493,9 +492,9 @@ def extra_functionality(n, snapshots, **kwargs):
         if 'flex' in o:
             logger.info('Adding flexibility constraints.')
             add_flexibility_constraints(n, config, o, flexibility_potential)
-    # if no flexibility opt wildcard given, assume 0% flexibility
-    if sum('flex' in o for o in opts) == 0:
-       add_flexibility_constraints(n, config, 'flex0.0')
+        # if no flexibility opt wildcard given but flex left on, assume 0% flexibility
+        if (config['heating']['heating_flexibility'] == True) and (sum('flex' in o for o in opts) == 0):
+            add_flexibility_constraints(n, config, 'flex0.0', flexibility_potential)
     logger.info('Adding battery constraints.')
     add_battery_constraints(n)
 
