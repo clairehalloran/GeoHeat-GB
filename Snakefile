@@ -516,11 +516,14 @@ rule build_heating_profiles:
         regions = "resources/"
         + RDIR
         + "regions_onshore_elec_s{simpl}_{clusters}.geojson",
+	heating_profiles = 'data/Watson_heat_profiles.xlsx',
         population = 'data/population_layout/GB_residential_population_2011_1_km.tif',
         cutout = "cutouts/"+ CDIR + config["heating"]["cutout"] + ".nc",
     output:
-        profile_air_source_heating = 'resources/' + RDIR + 'load_air_source_heating_elec_s{simpl}_{clusters}.nc',
-        profile_ground_source_heating = 'resources/' + RDIR + 'load_ground_source_heating_elec_s{simpl}_{clusters}.nc'
+        profile_air_source_space_heating = 'resources/' + RDIR + 'load_air_source_space_heating_elec_s{simpl}_{clusters}.nc',
+        profile_air_source_DHW_heating = 'resources/' + RDIR + 'load_air_source_DHW_heating_elec_s{simpl}_{clusters}.nc',
+        profile_ground_source_space_heating = 'resources/' + RDIR + 'load_ground_source_space_heating_elec_s{simpl}_{clusters}.nc',
+        profile_ground_source_DHW_heating = 'resources/' + RDIR + 'load_ground_source_DHW_heating_elec_s{simpl}_{clusters}.nc'
     script:
         "scripts/build_heating_profiles.py"
 
@@ -535,8 +538,10 @@ rule aggregate_heat_flexibility:
 
 rule add_extra_components:
     input:
-        profile_air_source_heating = 'resources/' + RDIR + 'load_air_source_heating_elec_s{simpl}_{clusters}.nc',
-        profile_ground_source_heating = 'resources/' + RDIR + 'load_ground_source_heating_elec_s{simpl}_{clusters}.nc',
+        profile_air_source_space_heating = 'resources/' + RDIR + 'load_air_source_space_heating_elec_s{simpl}_{clusters}.nc',
+        profile_air_source_DHW_heating = 'resources/' + RDIR + 'load_air_source_DHW_heating_elec_s{simpl}_{clusters}.nc',
+        profile_ground_source_space_heating = 'resources/' + RDIR + 'load_ground_source_space_heating_elec_s{simpl}_{clusters}.nc',
+        profile_ground_source_DHW_heating = 'resources/' + RDIR + 'load_ground_source_DHW_heating_elec_s{simpl}_{clusters}.nc',
         profile_air_cop = "resources/" + RDIR + "cop_air_elec_s{simpl}_{clusters}.nc",
         profile_ground_cop = "resources/" + RDIR + "cop_ground_elec_s{simpl}_{clusters}.nc",
         flexibility_potential = "resources/" + RDIR + "heat_flexibility_elec_s{simpl}_{clusters}.csv",

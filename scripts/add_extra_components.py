@@ -199,7 +199,7 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, heating_conf
     
     for source in heat_sources:
         source_share = heating_config[f'{source}']['share']
-        with xr.open_dataset(getattr(heat_profiles, 'profile_' + source + '_source_heating')) as ds:
+        with xr.open_dataset(getattr(heat_profiles, 'profile_' + source + '_source_space_heating')) as ds:
             if ds.indexes["bus"].empty:
                 continue
             # create heat buses
@@ -218,12 +218,29 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, heating_conf
             n.madd(
                 'Load',
                 names = buses_i,
-                suffix = f'_{source}_heat',
+                suffix = f'_{source}_space_heat',
                 carrier = 'heat',
                 bus = heat_buses_i,
                 p_set = heating_demand,
                 )
-            with xr.open_dataset(getattr(cop_profiles, 'profile_' + source + '_cop')) as cop:
+        with xr.open_dataset(getattr(heat_profiles, 'profile_' + source + '_source_DHW_heating')) as ds:
+            if ds.indexes["bus"].empty:
+                continue
+            # add heating demand to buses
+            heating_demand = ds['demand'].to_pandas().T
+            # remove small heating demands outside GB
+            for column in heating_demand.columns:
+                if 'GB1' not in column:
+                    heating_demand[column] = 0.
+            n.madd(
+                'Load',
+                names = buses_i,
+                suffix = f'_{source}_DHW_heat',
+                carrier = 'heat',
+                bus = heat_buses_i,
+                p_set = heating_demand,
+                )
+        with xr.open_dataset(getattr(cop_profiles, 'profile_' + source + '_cop')) as cop:
 
                 cop = cop['cop'].to_pandas()
             
@@ -243,6 +260,7 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, heating_conf
                     p_nom = source_share * households * heat_pump_capacity,
                     capital_cost = 0 
                     )
+        if heating_config['heating_flexibility']==True:
             # add flexibility from building envelope thermal inertia
             n.add("Carrier", source + " building envelope")
             
@@ -262,7 +280,7 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, heating_conf
                 carrier=source + " building envelope charger",
                 p_nom_extendable=True
                 )
-
+    
             n.madd(
                 "Link",
                 buses_i + f" {source} building envelope discharger",

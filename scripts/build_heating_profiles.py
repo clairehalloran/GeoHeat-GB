@@ -109,65 +109,109 @@ import rasterio
 logger = logging.getLogger(__name__)
 
 # define function for Watson et al. 2021 heating demand applicable to GB
-def convert_watson_heat_demand(ds, source, num_dwellings = 1):
-    watson_filepath = f'data/{source}_source_heat_profiles.csv'
+def convert_watson_heat_demand(ds, heating_profiles, source, end_use = 'combined', num_dwellings = 1):
+    # watson_filepath = f'data/{source}_source_{end_use}_heat_profiles.csv'
     T_hourly = ds['temperature']
-    #!!! note this isn't population-weighted right now
+    # note this isn't population-weighted right now
     # calculate population-weighted temperature as part of clustering
     T = T_hourly.resample(time="1D").mean(dim="time")-273.15 # convert to Celsius
     T.load()
-    
+    if source != 'air' and source != 'ground':
+        raise NotImplementedError(f'Source {source} has not been implemented yet, only ground- and air-source allowed.')
     #read in watson data
-    watson_data = pd.read_csv(watson_filepath, index_col = 0, parse_dates = [0])
-    #add heat demand profiles if mean daily temp is more extreme
-    watson_data['temp>19.5C'] = watson_data['temp16.5C to 19.5C'] #repeat hottest
-    watson_data['temp<-4.5C'] = watson_data['temp-4.5C to -1.5C'] #repeat coldest
+    if end_use == 'DHW':
+        sheet = 'Normalised DHW profile'
+    elif end_use == 'space' and source == 'air':
+        sheet = 'Space heat 100% ASHP'
+    elif end_use == 'space' and source == 'ground':
+        sheet = 'Space heat 100% GSHP'
+    elif end_use == 'combined' and source == 'air':
+        sheet = 'Total heat 100% ASHP'
+    elif end_use == 'combined' and source == 'ground':
+        sheet = 'Total heat 100% GSHP'
+    
+    watson_data = pd.read_excel(heating_profiles, sheet, index_col = 0)
+    watson_data.index = pd.to_datetime(watson_data.index, format= '%H:%M:%S')
     watson_data = watson_data.resample('1H').max()
     time_resolution_watson_hour = 0.5 # resolution of input data
-
     #find which normalized profile to use for each day    
     def _heating_demand_profile(daily_temp_array):
         # takes an array of daily temperatures and returns a half-hourly array of heating demand
         heat_demand_list = []
         for i in range(len(daily_temp_array)):
             temp = daily_temp_array[i] 
-            if temp > 19.5:
-                col = 'temp>19.5C'
-                # print('Hotter than Watson et al 2021 accounted for')
-            elif temp > 16.5:
-                col  = 'temp16.5C to 19.5C'
-            elif temp > 13.5:
-                col = 'temp13.5C to 16.5C'
-            elif temp > 10.5:
-                col = 'temp10.5C to 13.5C'
-            elif temp > 7.5:
-                col = 'temp7.5C to 10.5C'
-            elif temp > 4.5:
-                col = 'temp4.5C to 7.5C'
-            elif temp > 1.5:
-                col = 'temp1.5C to 4.5C'
-            elif temp > -1.5:
-                col = 'temp-1.5C to 1.5C'
-            elif temp > -4.5:
-                col = 'temp-4.5C to -1.5C'
-            else: 
-                col = 'temp<-4.5C'
-                # print('Colder than Watson et al 2021 accounted for')
-                 
-            daily_profile_norm = watson_data[col].values
-            
+            if end_use != 'DHW':
+                #add heat demand profiles if mean daily temp is more extreme
+                watson_data['>19.5°C'] = watson_data['16.5°C to 19.5°C'] #repeat hottest
+                watson_data['<-4.5°C'] = watson_data['-4.5°C to -1.5°C'] #repeat coldest
+                if temp > 19.5:
+                    col = '>19.5°C'
+                elif temp > 16.5:
+                    col  = '16.5°C to 19.5°C'
+                elif temp > 13.5:
+                    col = '13.5°C to 16.5°C'
+                elif temp > 10.5:
+                    col = '10.5°C to 13.5°C'
+                elif temp > 7.5:
+                    col = '7.5°C to 10.5°C'
+                elif temp > 4.5:
+                    col = '4.5°C to 7.5°C'
+                elif temp > 1.5:
+                    col = '1.5°C to 4.5°C'
+                elif temp > -1.5:
+                    col = '-1.5°C to 1.5°C'
+                elif temp > -4.5:
+                    col = '-4.5°C to -1.5°C'
+                elif temp <= -4.5: 
+                    col = '<-4.5°C'
+                daily_profile_norm = watson_data[col].values
+            elif end_use == 'DHW':
+                col = 'All outdoor temperatures'
+                # DHW input data not normalized
+                daily_profile = watson_data[col].values
+                # divide by 2 to account for half-hourly normalization to 1
+                # and hourly resampling
+                daily_profile_norm = daily_profile/(2*daily_profile.sum())
+
             # get total daily heat demand 
-            # linear relationship between temperature and kWh heat demand per dwelling
-            # from Watson based on 75% air source 25% ground source heat pumps
-            # they observe that roughly similar numbers of households in each heating pattern
-            # for ASHP and GSHP, so assume that mix is representative
-            if temp < 14.3:
-                gradient = -5.88
-                y_int = 97.2
+            # discontinuous linear relationship between temperature and kWh heat demand per dwelling
+            if end_use == 'combined':
+                if source == 'air':
+                    if temp < 14.3:
+                        gradient = -5.85
+                        y_int = 96.7
+                    else:
+                        gradient = -1.1
+                        y_int = 28.7
+                elif source == 'ground':
+                    if temp < 14.3:
+                        gradient = -5.96
+                        y_int = 98.7
+                    else:
+                        gradient = -1.15
+                        y_int = 29.8
+            elif end_use == 'space':
+                if source == 'air':
+                    if temp < 14.3:
+                        gradient = -5.53
+                        y_int = 83.8
+                    else:
+                        gradient = -0.77
+                        y_int = 15.8
+                elif source == 'ground':
+                    if temp < 14.3:
+                        gradient = -5.64
+                        y_int = 85.8
+                    else:
+                        gradient = -0.82
+                        y_int = 16.9
+            elif end_use == 'DHW':
+                gradient = -0.324
+                y_int = 12.9
             else:
-                gradient = -1.11
-                y_int = 30
-                
+                raise NotImplementedError(
+                    f'End-use {end_use} has not been implemented yet, only space, DHW, or combined end use allowed.')
+
             daily_heat_demand = temp * gradient + y_int
             
             # multiply profile by daily heat demand and 2 to convert kWh to KW on half hour basis
@@ -197,9 +241,19 @@ def convert_watson_heat_demand(ds, source, num_dwellings = 1):
     heat_demand = heat_demand.clip(min=0.0)
     return heat_demand/1000 # convert from kW to MW-- units: MW per household
 
-def heat_demand_watson(cutout, source, **params):
+def heat_demand_watson(cutout, heating_profiles, source, end_use, **params):
     """
     Creates GB heat demand profile for an average dwelling based on Watson et al. 2021 and input temperature data
+    
+    cutout: atlite cutout
+        outdoor temperature at daily or higher temporal resolution
+    heating_profiles: pandas dataframe
+        Watson et al. heating profiles
+    source: string
+        air or ground source
+    end_use: string, default 'combined'
+        end use, either 'space', 'DHW' for hot water, or 'combined' for both.
+    
     
     Input temperature profile should be
         -at least daily time resolution
@@ -209,19 +263,16 @@ def heat_demand_watson(cutout, source, **params):
         
     Output profile is kW heat demand at HALF HOURLY time resolution (kW/HH)
     If want less fine (e.g. hourly), can resample and ensure adjust units appropriately
-    
-    From Watson et al 2021 - update parameters if use different mix
-    75% ASHP 25% GSHP
-    For T(eff)<14.3 gradient -5.88 yint 97.2
-    For T(eff)>14.3 gradient -1.11 yint 30
-    
+        
     num_dwellings = number of residential households so can scale up to right level of total demand
     default = 1 household
     Watson et al use num_dwellings = 25.8 * 1e6 for 2010
     """
     return cutout.convert_and_aggregate(
         convert_func = convert_watson_heat_demand,
+        heating_profiles = heating_profiles,
         source = source,
+        end_use = end_use,
         **params,
         )
 
@@ -255,7 +306,7 @@ if __name__ == "__main__":
     # transform to same CRS and resolution as cutout
     population_match = population.rio.reproject_match(cutout_rio,
                                                       resampling = rasterio.enums.Resampling.sum)
-    population_match = population_match.squeeze().drop('band')
+    population_match = population_match.squeeze().drop_vars('band')
     population_match = population_match.where(population_match>0.)
     # population_match = population_match.fillna(0.)
     households = population_match/2.4 # England and Wales average household size
@@ -272,20 +323,49 @@ if __name__ == "__main__":
         # use mask of population to replace temperature within Britain with average
         cutout.data['temperature'] = cutout.data['temperature'].where(population_match.isnull(),weighted_temperature)
     
-    ASHP_heating_demand = heat_demand_watson(cutout,
+    heating_profiles = pd.ExcelFile(snakemake.input.heating_profiles)
+    
+    ASHP_space_heating_demand = heat_demand_watson(cutout,
+                                             heating_profiles,
                                                 'air',
+                                                'space',
                                                 layout = households_air,
                                                 index = buses,
                                                 shapes = regions,
                                                 )
-    ASHP_heating_demand = ASHP_heating_demand.rename('demand')
-    ASHP_heating_demand.to_netcdf(snakemake.output.profile_air_source_heating)
+    ASHP_space_heating_demand = ASHP_space_heating_demand.rename('demand')
+    ASHP_space_heating_demand.to_netcdf(snakemake.output.profile_air_source_space_heating)
 
-    GSHP_heating_demand = heat_demand_watson(cutout,
-                                                'ground',
-                                                layout = households_ground,
-                                                index=buses,
+    ASHP_DHW_heating_demand = heat_demand_watson(cutout,
+                                             heating_profiles,
+                                                'air',
+                                                'DHW',
+                                                layout = households_air,
+                                                index = buses,
                                                 shapes = regions,
                                                 )
-    GSHP_heating_demand = GSHP_heating_demand.rename('demand')
-    GSHP_heating_demand.to_netcdf(snakemake.output.profile_ground_source_heating)
+    ASHP_DHW_heating_demand = ASHP_DHW_heating_demand.rename('demand')
+    ASHP_DHW_heating_demand.to_netcdf(snakemake.output.profile_air_source_DHW_heating)
+
+
+    GSHP_space_heating_demand = heat_demand_watson(cutout,
+                                             heating_profiles,
+                                                'ground',
+                                                'space',
+                                                layout = households_ground,
+                                                index = buses,
+                                                shapes = regions,
+                                                )
+    GSHP_space_heating_demand = GSHP_space_heating_demand.rename('demand')
+    GSHP_space_heating_demand.to_netcdf(snakemake.output.profile_ground_source_space_heating)
+
+    GSHP_DHW_heating_demand = heat_demand_watson(cutout,
+                                             heating_profiles,
+                                                'ground',
+                                                'DHW',
+                                                layout = households_ground,
+                                                index = buses,
+                                                shapes = regions,
+                                                )
+    GSHP_DHW_heating_demand = GSHP_DHW_heating_demand.rename('demand')
+    GSHP_DHW_heating_demand.to_netcdf(snakemake.output.profile_ground_source_DHW_heating)
