@@ -207,6 +207,7 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, heating_conf
                 'Bus',
                 names = buses_i + f'_heat_{source}',
                 carrier = 'heat',
+                location = buses_i,
                 **bus_sub_dict
                 )  
             # add heating demand to buses
