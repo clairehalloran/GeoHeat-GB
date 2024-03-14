@@ -234,6 +234,20 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         .sum()
         .sum("snapshot")
         )
+    p_dispatch = n.model.variables['StorageUnit-p_dispatch']
+    p_store = n.model.variables['StorageUnit-p_store']
+    state_of_charge = n.model.variables['StorageUnit-state_of_charge']
+    lhs_storage_unit_losses = (
+        level * scaling * (
+        (p_dispatch * n.snapshot_weightings.stores * (1-n.storage_units.efficiency_dispatch)
+         + p_store * n.snapshot_weightings.stores * (1-n.storage_units.efficiency_store))
+        +
+        #!!! not implemented for time steps other than 1 hour
+        state_of_charge * n.storage_units.standing_loss
+        ).groupby(sgrouper.to_xarray())  
+        .sum()
+        .sum("snapshot")
+        )
     # TODO: double check that this is really needed, why do have to subtract the spillage
     if not n.storage_units_t.inflow.empty:
         spillage = n.model["StorageUnit-spill"]
@@ -243,7 +257,7 @@ def add_EQ_constraints(n, o, scaling=1e-1):
             .sum()
             .sum("snapshot")
         )
-        lhs = lhs_gen + lhs_spill - lhs_store_losses
+        lhs = lhs_gen + lhs_spill - lhs_store_losses - lhs_storage_unit_losses
     else:
         lhs = lhs_gen - lhs_store_losses
     n.model.add_constraints(lhs >= rhs, name="equity_min")
