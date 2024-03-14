@@ -380,7 +380,7 @@ def add_flexibility_constraints(n, config, o, flexibility_potential):
         # flexibility_discharge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope charger/discharger"]
         flexible_households_share = flexible_households / (households*source_share).replace(0,np.inf)
 
-        # limit flexibility charging based on mean thermal capacity of heat pumps in Watson et al.
+        # limit p_nom as the maximum of the flexible households times the peak heat demand in that area
         peak_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat'].max()
         # update index of peak heat demand to match households dischargers
         peak_heat_demand.index = (buses_i + f" {source} building envelope")
