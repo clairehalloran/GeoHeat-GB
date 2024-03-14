@@ -377,52 +377,17 @@ def add_flexibility_constraints(n, config, o, flexibility_potential):
             if bus not in n.loads_t['p_set'].columns:
                 n.loads_t['p_set'][bus] = 0.
         
-        # limit p_nom as the maximum of the flexible households times the peak space heat demand in that area
-        peak_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_space_heat'].max()
-        # update index of peak heat demand to match households dischargers
-        peak_heat_demand.index = (buses_i + f" {source} building envelope")
-        
-        flexibility_discharge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope discharger"]
+        # flexibility_discharge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope charger/discharger"]
         flexible_households_share = flexible_households / (households*source_share).replace(0,np.inf)
-        
-        links = buses_i.values + f" {source} building envelope discharger"
-        buses = buses_i + f" {source} building envelope"
-        discharge_power_mask = xr.DataArray(
-            np.eye(peak_heat_demand.size,flexible_households_share.size,dtype=bool),
-            dims = ['Link-ext','Bus'],
-            coords={
-                'Link-ext' : links,
-                'Bus' : buses
-                }
-            )
-        
-        n.model.add_constraints(flexibility_discharge_power
-                              == flexible_households_share * peak_heat_demand,
-                              name = f'{source}-flexibility-discharge-limit',
-                              # mask to only apply on diagonal
-                                mask = discharge_power_mask
-                              )
-        
-        # update index of peak heat demand to match load
-        peak_heat_demand.index = (buses_i.values + f'_{source}_space_heat')
-        
-        # set p_nom_max as normalized heat demand for each time step 
-        # !!! update to only allow space heating demand to be met by flex?
-        normalized_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_space_heat']/peak_heat_demand
-        # reindex to links instead of buses
-        normalized_heat_demand.columns = (buses_i.values + f" {source} building envelope discharger")
-        normalized_heat_demand.fillna(0,inplace=True)
-        
-        n.links_t['p_max_pu'] = normalized_heat_demand
-        
+
         # limit flexibility charging based on mean thermal capacity of heat pumps in Watson et al.
         
-        flexibility_charge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope charger"]
+        flexibility_charge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope charger/discharger"]
 
-        links = buses_i.values + f" {source} building envelope charger"
+        links = buses_i.values + f" {source} building envelope charger/discharger"
         buses = buses_i + f" {source} building envelope"
         charge_power_mask = xr.DataArray(
-            np.eye(peak_heat_demand.size,flexible_households_share.size,dtype=bool),
+            np.eye(flexibility_charge_power.size,flexible_households_share.size,dtype=bool),
             dims = ['Link-ext','Bus'],
             coords={
                 'Link-ext' : links,
@@ -435,6 +400,33 @@ def add_flexibility_constraints(n, config, o, flexibility_potential):
                               # mask to only apply on diagonal
                                 mask = charge_power_mask
                               )
+
+        # limit flexibility discharge to space heat demand of flexible households for each time step
+        heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_space_heat']
+        # reindex to links instead of buses
+        heat_demand.columns = (buses_i.values + f" {source} building envelope charger/discharger")
+        
+        flexibility_temporal_discharge = n.model.variables['Link-p'].loc[:,buses_i.values + f" {source} building envelope charger/discharger"]
+        
+        # discharge mask
+        
+        links = buses_i.values + f" {source} building envelope charger/discharger"
+        buses = buses_i + f" {source} building envelope"
+        discharge_power_mask = xr.DataArray(
+            np.eye(flexibility_charge_power.size,flexible_households_share.size,dtype=bool),
+            dims = ['Link','Bus'],
+            coords={
+                'Link' : links,
+                'Bus' : buses
+                }
+            )
+        
+        inverse_heat_demand = (1/ heat_demand ).replace(np.inf,0)
+        n.model.add_constraints(flexibility_temporal_discharge * inverse_heat_demand
+                                >= -flexible_households_share,
+                                name = f'{source}-temporal-flexibility-discharge-limit',
+                                mask = discharge_power_mask
+                                )
         
         # limit e_nom based on mean thermal capacity in each region, number of flexible households, and temperature window
         thermal_capacity = flexibility_potential['Thermal capacity [kWh/C]']/1000 # convert from kWh to MWh
