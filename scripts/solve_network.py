@@ -229,7 +229,7 @@ def add_EQ_constraints(n, o, scaling=1e-1):
     e = n.model['Store-e']
     # !!! not implemented for time steps other than 1 hour
     lhs_store_losses = (
-        (level * e * n.stores.standing_loss * scaling)
+        (e * n.stores.standing_loss * scaling)
         .groupby(storegrouper.to_xarray())
         .sum()
         .sum("snapshot")
@@ -238,7 +238,7 @@ def add_EQ_constraints(n, o, scaling=1e-1):
     p_store = n.model.variables['StorageUnit-p_store']
     state_of_charge = n.model.variables['StorageUnit-state_of_charge']
     lhs_storage_unit_losses = (
-        level * scaling * (
+         scaling * (
         (p_dispatch * n.snapshot_weightings.stores * (1-n.storage_units.efficiency_dispatch)
          + p_store * n.snapshot_weightings.stores * (1-n.storage_units.efficiency_store))
         +
@@ -259,7 +259,7 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         )
         lhs = lhs_gen + lhs_spill - lhs_store_losses - lhs_storage_unit_losses
     else:
-        lhs = lhs_gen - lhs_store_losses
+        lhs = lhs_gen - lhs_store_losses - lhs_storage_unit_losses
     n.model.add_constraints(lhs >= rhs, name="equity_min")
 
 
