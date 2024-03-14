@@ -381,45 +381,6 @@ def add_flexibility_constraints(n, config, o, flexibility_potential):
         flexible_households_share = flexible_households / (households*source_share).replace(0,np.inf)
 
         # limit flexibility charging based on mean thermal capacity of heat pumps in Watson et al.
-        peak_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat'].max()
-        # update index of peak heat demand to match households dischargers
-        peak_heat_demand.index = (buses_i + f" {source} building envelope")
-        
-        flexibility_discharge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope discharger"]
-        flexible_households_share = flexible_households / (households*source_share).replace(0,np.inf)
-        
-        links = buses_i.values + f" {source} building envelope discharger"
-        buses = buses_i + f" {source} building envelope"
-        discharge_power_mask = xr.DataArray(
-            np.eye(peak_heat_demand.size,flexible_households_share.size,dtype=bool),
-            dims = ['Link-ext','Bus'],
-            coords={
-                'Link-ext' : links,
-                'Bus' : buses
-                }
-            )
-        
-        n.model.add_constraints(flexibility_discharge_power
-                              == flexible_households_share * peak_heat_demand,
-                              name = f'{source}-flexibility-discharge-limit',
-                              # mask to only apply on diagonal
-                                mask = discharge_power_mask
-                              )
-        
-        # update index of peak heat demand to match load
-        peak_heat_demand.index = (buses_i.values + f'_{source}_heat')
-        
-        # set p_nom_max as normalized heat demand for each time step 
-        # !!! update to only allow space heating demand to be met by flex?
-        normalized_heat_demand = n.loads_t['p_set'][buses_i.values + f'_{source}_heat']/peak_heat_demand
-        # reindex to links instead of buses
-        normalized_heat_demand.columns = (buses_i.values + f" {source} building envelope discharger")
-        normalized_heat_demand.fillna(0,inplace=True)
-        
-        n.links_t['p_max_pu'] = normalized_heat_demand
-        
-        
-        # limit flexibility charging based on mean thermal capacity of heat pumps
         
         flexibility_charge_power = n.model.variables['Link-p_nom'].loc[buses_i.values + f" {source} building envelope charger/discharger"]
 
