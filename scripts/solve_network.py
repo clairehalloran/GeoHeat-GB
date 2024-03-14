@@ -199,10 +199,16 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         ggrouper = n.generators.bus.map(n.buses.country)
         lgrouper = n.loads.bus.map(n.buses.country)
         sgrouper = n.storage_units.bus.map(n.buses.country)
+        storegrouper = n.stores.bus.str.removesuffix(
+            ' air building envelope').str.removesuffix(
+                ' ground building envelope').map(n.buses.country)
     else:
         ggrouper = n.generators.bus
         lgrouper = n.loads.bus
         sgrouper = n.storage_units.bus
+        storegrouper = n.stores.bus.str.removesuffix(
+            ' air building envelope').str.removesuffix(
+                ' ground building envelope')
     load = (
         n.snapshot_weightings.generators
         @ n.loads_t.p_set.groupby(lgrouper, axis=1).sum()
@@ -220,6 +226,14 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         .sum()
         .sum("snapshot")
     )
+    e = n.model['Store-e']
+    # !!! not implemented for time steps other than 1 hour
+    lhs_store_losses = (
+        (level * e * n.stores.standing_loss * scaling)
+        .groupby(storegrouper.to_xarray())
+        .sum()
+        .sum("snapshot")
+        )
     # TODO: double check that this is really needed, why do have to subtract the spillage
     if not n.storage_units_t.inflow.empty:
         spillage = n.model["StorageUnit-spill"]
@@ -229,9 +243,9 @@ def add_EQ_constraints(n, o, scaling=1e-1):
             .sum()
             .sum("snapshot")
         )
-        lhs = lhs_gen + lhs_spill
+        lhs = lhs_gen + lhs_spill - lhs_store_losses
     else:
-        lhs = lhs_gen
+        lhs = lhs_gen - lhs_store_losses
     n.model.add_constraints(lhs >= rhs, name="equity_min")
 
 
