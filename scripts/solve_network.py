@@ -236,15 +236,10 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         )
     p_dispatch = n.model.variables['StorageUnit-p_dispatch']
     p_store = n.model.variables['StorageUnit-p_store']
-    state_of_charge = n.model.variables['StorageUnit-state_of_charge']
+    
     lhs_storage_unit_losses = (
-         scaling * (
-        (p_dispatch * n.snapshot_weightings.stores * (1/n.storage_units.efficiency_dispatch-1)
-         + p_store * n.snapshot_weightings.stores * (1-n.storage_units.efficiency_store))
-        +
-        #!!! not implemented for time steps other than 1 hour
-        state_of_charge * n.storage_units.standing_loss
-        ).groupby(sgrouper.to_xarray())  
+        ((p_store - p_dispatch)* n.snapshot_weightings.stores * scaling)
+        .groupby(sgrouper.to_xarray())  
         .sum()
         .sum("snapshot")
         )
