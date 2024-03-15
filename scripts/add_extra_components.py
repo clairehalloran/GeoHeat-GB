@@ -275,22 +275,14 @@ def add_heat(n, heat_profiles, cop_profiles, flexibility_potential, heating_conf
             
             n.madd(
                 "Link",
-                buses_i + f" {source} building envelope charger",
+                buses_i + f" {source} building envelope charger/discharger",
                 bus0 = heat_buses_i,
                 bus1 = buses_i + f" {source} building envelope",
                 carrier=source + " building envelope charger",
-                p_nom_extendable=True
+                p_nom_extendable=True,
+                p_min_pu = -1 # allow bidirectional flow
                 )
     
-            n.madd(
-                "Link",
-                buses_i + f" {source} building envelope discharger",
-                bus0 = buses_i + f" {source} building envelope",
-                bus1 = heat_buses_i,
-                carrier = source + " building envelope discharger",
-                p_nom_extendable=True,
-            )
-            
             tes_time_constant = flexibility_potential['Thermal time constant [h]']
             tes_time_constant.index = buses_i + f" {source} building envelope"
             
