@@ -198,23 +198,24 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         ggrouper = n.generators.bus.map(n.buses.country)
         lgrouper = n.loads.bus.map(n.buses.country)
         sgrouper = n.storage_units.bus.map(n.buses.country)
-        hpgrouper = n.links.filter(like = 'heat pump',axis=0).bus0.map(n.buses.country)
+        hpgrouper = n.links.filter(like = 'heat pump',axis=0).bus0.map(n.buses.country).rename('bus')
 
     else:
         ggrouper = n.generators.bus
         lgrouper = n.loads.bus
         sgrouper = n.storage_units.bus
-        n.links.filter(like = 'heat pump',axis=0).bus0
+        n.links.filter(like = 'heat pump',axis=0).bus0.rename('bus')
 
     load = (
-        n.snapshot_weightings.generators
-        @ n.loads_t.p_set
+        (n.snapshot_weightings.generators
+        @ n.loads_t.p_set)
         .filter(like='AC') # exclude thermal load
-        .groupby(lgrouper, axis=1).sum()
+        .groupby(lgrouper).sum()
     )
     inflow = (
-        n.snapshot_weightings.stores
-        @ n.storage_units_t.inflow.groupby(sgrouper, axis=1).sum()
+        (n.snapshot_weightings.stores
+        @ n.storage_units_t.inflow)
+        .groupby(sgrouper).sum()
     )
     inflow = inflow.reindex(load.index).fillna(0.0)
     rhs = scaling * (level * load - inflow)
@@ -256,7 +257,6 @@ def add_EQ_constraints(n, o, scaling=1e-1):
         lhs = lhs_gen + lhs_spill - lhs_storage_unit_losses - lhs_heat_pump_load
     else:
         lhs = lhs_gen - lhs_storage_unit_losses - lhs_heat_pump_load
-
     n.model.add_constraints(lhs >= rhs, name="equity_min")
 
 
